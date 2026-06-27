@@ -7,8 +7,8 @@ type FilterTabsProps = {
 
 const FILTERS: { value: FilterOption; label: string }[] = [
   { value: "all", label: "Alle" },
-  { value: "watched-by-me", label: "Von mir gesehen" },
-  { value: "unwatched", label: "Ungesehen" },
+  { value: "watched-by-me", label: "Geschaut" },
+  { value: "unwatched", label: "Nicht geschaut" },
 ];
 
 export function FilterTabs({ active, onChange }: FilterTabsProps) {

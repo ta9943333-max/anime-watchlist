@@ -5,15 +5,23 @@ import { AlertCircle, LogOut, Sparkles, Tv } from "lucide-react";
 import { AnimeForm } from "@/components/AnimeForm";
 import { AnimeList } from "@/components/AnimeList";
 import { FilterTabs } from "@/components/FilterTabs";
+import { FolderSection } from "@/components/FolderSection";
 import { SearchBar } from "@/components/SearchBar";
 import { SortTabs } from "@/components/SortTabs";
 import { UserSelector } from "@/components/UserSelector";
 import {
   addAnime,
   fetchAnimeList,
+  moveAnimeToFolder,
   subscribeToAnimeChanges,
   updateWatchedBy,
 } from "@/lib/supabase/anime-service";
+import {
+  createFolder,
+  deleteFolder,
+  fetchFolders,
+  subscribeToFolderChanges,
+} from "@/lib/supabase/folder-service";
 import {
   fetchMembers,
   registerMember,
@@ -25,10 +33,13 @@ import {
   saveCurrentUser,
 } from "@/lib/storage";
 import {
-  sortAnimeList,
+  applyAnimeFilters,
+  hasWatchedByMember,
+  mergeAnimeLists,
   sortMembersByName,
   type AnimeEntry,
   type FilterOption,
+  type Folder,
   type Member,
   type SortOption,
 } from "@/lib/types";
@@ -40,7 +51,9 @@ function getInitialUser(): string | null {
 export function WatchlistApp() {
   const [currentUser, setCurrentUser] = useState<string | null>(getInitialUser);
   const [members, setMembers] = useState<Member[]>([]);
+  const [folders, setFolders] = useState<Folder[]>([]);
   const [animeList, setAnimeList] = useState<AnimeEntry[]>([]);
+  const [openFolderId, setOpenFolderId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterOption>("all");
   const [sort, setSort] = useState<SortOption>("newest");
   const [search, setSearch] = useState("");
@@ -48,6 +61,7 @@ export function WatchlistApp() {
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [folderSetupNeeded, setFolderSetupNeeded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,9 +72,19 @@ export function WatchlistApp() {
           fetchAnimeList(),
           fetchMembers(),
         ]);
+
+        let folderList: Folder[] = [];
+        try {
+          folderList = await fetchFolders();
+          if (!cancelled) setFolderSetupNeeded(false);
+        } catch {
+          if (!cancelled) setFolderSetupNeeded(true);
+        }
+
         if (!cancelled) {
-          setAnimeList(list);
+          setAnimeList((prev) => mergeAnimeLists(prev, list));
           setMembers(memberList);
+          setFolders(folderList);
           setError(null);
         }
       } catch (err) {
@@ -86,11 +110,15 @@ export function WatchlistApp() {
     const unsubscribeMembers = subscribeToMemberChanges(() => {
       void loadData();
     });
+    const unsubscribeFolders = subscribeToFolderChanges(() => {
+      void loadData();
+    });
 
     return () => {
       cancelled = true;
       unsubscribeAnime();
       unsubscribeMembers();
+      unsubscribeFolders();
     };
   }, []);
 
@@ -115,17 +143,79 @@ export function WatchlistApp() {
 
   function handleLogout() {
     setCurrentUser(null);
+    setOpenFolderId(null);
     clearCurrentUser();
   }
 
   async function handleAddAnime(title: string) {
     try {
-      const entry = await addAnime(title);
+      const entry = await addAnime(title, null);
       setAnimeList((prev) => [entry, ...prev]);
       setError(null);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Anime konnte nicht gespeichert werden.",
+      );
+    }
+  }
+
+  async function handleAddAnimeToFolder(title: string, folderId: string) {
+    try {
+      const entry = await addAnime(title, folderId);
+      setAnimeList((prev) => [entry, ...prev]);
+      setError(null);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Anime konnte nicht gespeichert werden.",
+      );
+    }
+  }
+
+  async function handleCreateFolder(name: string) {
+    try {
+      const folder = await createFolder(name);
+      setFolders((prev) => [...prev, folder]);
+      setOpenFolderId(folder.id);
+      setFolderSetupNeeded(false);
+      setError(null);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Ordner konnte nicht erstellt werden.";
+      if (message.includes("Ordner-Tabelle fehlt")) {
+        setFolderSetupNeeded(true);
+      }
+      setError(message);
+    }
+  }
+
+  async function handleDeleteFolder(folderId: string) {
+    await deleteFolder(folderId);
+    setFolders((prev) => prev.filter((f) => f.id !== folderId));
+    setAnimeList((prev) =>
+      prev.map((a) => (a.folderId === folderId ? { ...a, folderId: null } : a)),
+    );
+    setOpenFolderId(null);
+  }
+
+  async function handleMoveToFolder(animeId: string, folderId: string | null) {
+    const anime = animeList.find((entry) => entry.id === animeId);
+    if (!anime) return;
+
+    setAnimeList((prev) =>
+      prev.map((entry) =>
+        entry.id === animeId ? { ...entry, folderId } : entry,
+      ),
+    );
+
+    try {
+      await moveAnimeToFolder(animeId, folderId);
+      setError(null);
+    } catch (err) {
+      setAnimeList((prev) =>
+        prev.map((entry) => (entry.id === animeId ? anime : entry)),
+      );
+      setError(
+        err instanceof Error ? err.message : "Verschieben fehlgeschlagen.",
       );
     }
   }
@@ -162,37 +252,40 @@ export function WatchlistApp() {
 
   const sortedMembers = useMemo(() => sortMembersByName(members), [members]);
 
-  const filteredList = useMemo(() => {
+  const filterOptions = useMemo(
+    () => ({
+      currentUser: currentUser ?? "",
+      filter,
+      search,
+      sort,
+    }),
+    [currentUser, filter, search, sort],
+  );
+
+  const openFolderAnime = useMemo(() => {
+    if (!currentUser || !openFolderId) return [];
+
+    return applyAnimeFilters(animeList, {
+      ...filterOptions,
+      scope: "folder",
+      folderId: openFolderId,
+    });
+  }, [animeList, currentUser, filterOptions, openFolderId]);
+
+  const allAnimeList = useMemo(() => {
     if (!currentUser) return [];
 
-    let list = animeList.filter((anime) => {
-      const watchedByMe = anime.watchedBy.includes(currentUser);
-
-      switch (filter) {
-        case "watched-by-me":
-          return watchedByMe;
-        case "unwatched":
-          return !watchedByMe;
-        default:
-          return true;
-      }
+    return applyAnimeFilters(animeList, {
+      ...filterOptions,
+      scope: "all",
     });
-
-    if (search.trim()) {
-      const query = search.trim().toLowerCase();
-      list = list.filter((anime) =>
-        anime.title.toLowerCase().includes(query),
-      );
-    }
-
-    return sortAnimeList(list, sort);
-  }, [animeList, currentUser, filter, search, sort]);
+  }, [animeList, currentUser, filterOptions]);
 
   const stats = useMemo(() => {
     if (!currentUser) return { total: 0, watched: 0, unwatched: 0 };
 
     const watched = animeList.filter((a) =>
-      a.watchedBy.includes(currentUser),
+      hasWatchedByMember(a.watchedBy, currentUser),
     ).length;
 
     return {
@@ -278,30 +371,71 @@ export function WatchlistApp() {
         )}
 
         <section className="mb-8 space-y-4">
-          <AnimeForm onAdd={handleAddAnime} />
           <SearchBar value={search} onChange={setSearch} />
           <FilterTabs active={filter} onChange={setFilter} />
           <SortTabs active={sort} onChange={setSort} />
-        </section>
-
-        <section>
-          {isLoading ? (
-            <div className="flex justify-center py-16">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-violet-500 border-t-transparent" />
-            </div>
-          ) : (
-            <AnimeList
-              animeList={filteredList}
-              members={sortedMembers}
-              currentUser={currentUser}
-              onToggleWatch={handleToggleWatch}
-            />
+          {filter !== "all" && (
+            <p className="text-xs text-slate-500">
+              Filter „{filter === "watched-by-me" ? "Geschaut" : "Nicht geschaut"}“
+              — Reihenfolge bleibt gleich, nur die Ansicht wird eingeschränkt.
+            </p>
           )}
         </section>
 
-        <p className="mt-8 text-center text-xs text-slate-600">
-          Namen alphabetisch · Sortierung wählbar · Suche nach Titel
-        </p>
+        {folderSetupNeeded && (
+          <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">
+            Ordner benötigen einmalig SQL in Supabase: Datei{" "}
+            <code className="text-amber-100">supabase/migrations/add_folders.sql</code>{" "}
+            im SQL Editor ausführen.
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="flex justify-center py-16">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-violet-500 border-t-transparent" />
+          </div>
+        ) : (
+          <>
+            <FolderSection
+              folders={folders}
+              animeList={animeList}
+              openFolderId={openFolderId}
+              openFolderAnime={openFolderAnime}
+              members={sortedMembers}
+              currentUser={currentUser}
+              onOpenFolder={setOpenFolderId}
+              onCreateFolder={handleCreateFolder}
+              onDeleteFolder={handleDeleteFolder}
+              onAddAnimeToFolder={handleAddAnimeToFolder}
+              onToggleWatch={handleToggleWatch}
+              onMoveToFolder={handleMoveToFolder}
+            />
+
+            {!openFolderId && (
+              <section>
+                <div className="mb-4">
+                  <h2 className="text-lg font-semibold text-white">Alle Anime</h2>
+                  <p className="text-sm text-slate-500">
+                    Komplette Liste · {allAnimeList.length} Einträge
+                  </p>
+                </div>
+
+                <div className="mb-5">
+                  <AnimeForm onAdd={handleAddAnime} />
+                </div>
+
+                <AnimeList
+                  animeList={allAnimeList}
+                  members={sortedMembers}
+                  folders={folders}
+                  currentUser={currentUser}
+                  onToggleWatch={handleToggleWatch}
+                  onMoveToFolder={handleMoveToFolder}
+                />
+              </section>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

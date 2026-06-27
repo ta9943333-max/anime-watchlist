@@ -3,9 +3,15 @@ import { FormEvent, useState } from "react";
 
 type AnimeFormProps = {
   onAdd: (title: string) => void;
+  placeholder?: string;
+  buttonLabel?: string;
 };
 
-export function AnimeForm({ onAdd }: AnimeFormProps) {
+export function AnimeForm({
+  onAdd,
+  placeholder = "Neuen Anime hinzufügen …",
+  buttonLabel = "Hinzufügen",
+}: AnimeFormProps) {
   const [title, setTitle] = useState("");
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -23,7 +29,7 @@ export function AnimeForm({ onAdd }: AnimeFormProps) {
         type="text"
         value={title}
         onChange={(event) => setTitle(event.target.value)}
-        placeholder="Neuen Anime hinzufügen …"
+        placeholder={placeholder}
         className="flex-1 rounded-xl border border-slate-800 bg-slate-950/80 px-4 py-3 text-white placeholder:text-slate-500 outline-none transition focus:border-violet-500/60 focus:ring-2 focus:ring-violet-500/20"
       />
       <button
@@ -32,7 +38,7 @@ export function AnimeForm({ onAdd }: AnimeFormProps) {
         className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-3 font-medium text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
       >
         <Plus className="h-4 w-4" />
-        Hinzufügen
+        {buttonLabel}
       </button>
     </form>
   );

@@ -1,22 +1,32 @@
-import { Check } from "lucide-react";
+import { Check, FolderInput } from "lucide-react";
 import { ProgressBar } from "@/components/ProgressBar";
-import { sortMembersByName, type AnimeEntry, type Member } from "@/lib/types";
+import {
+  countWatchedByMembers,
+  sortMembersByName,
+  type AnimeEntry,
+  type Folder,
+  type Member,
+} from "@/lib/types";
 
 type AnimeCardProps = {
   anime: AnimeEntry;
   members: Member[];
+  folders: Folder[];
   currentUser: string;
   onToggleWatch: (animeId: string, memberName: string) => void;
+  onMoveToFolder: (animeId: string, folderId: string | null) => void;
 };
 
 export function AnimeCard({
   anime,
   members,
+  folders,
   currentUser,
   onToggleWatch,
+  onMoveToFolder,
 }: AnimeCardProps) {
   const sortedMembers = sortMembersByName(members);
-  const watchedCount = anime.watchedBy.length;
+  const watchedCount = countWatchedByMembers(anime.watchedBy, members);
   const isWatchedByMe = anime.watchedBy.includes(currentUser);
 
   return (
@@ -75,6 +85,26 @@ export function AnimeCard({
           );
         })}
       </div>
+
+      {folders.length > 0 && (
+        <div className="mt-4 flex items-center gap-2">
+          <FolderInput className="h-4 w-4 shrink-0 text-slate-500" />
+          <select
+            value={anime.folderId ?? ""}
+            onChange={(event) =>
+              onMoveToFolder(anime.id, event.target.value || null)
+            }
+            className="flex-1 rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2 text-sm text-slate-300 outline-none focus:border-violet-500/50"
+          >
+            <option value="">Allgemeine Liste</option>
+            {folders.map((folder) => (
+              <option key={folder.id} value={folder.id}>
+                {folder.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
     </article>
   );
 }

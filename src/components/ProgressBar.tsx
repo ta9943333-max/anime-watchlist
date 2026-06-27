@@ -4,13 +4,16 @@ type ProgressBarProps = {
 };
 
 export function ProgressBar({ value, max }: ProgressBarProps) {
-  const percent = max > 0 ? Math.round((value / max) * 100) : 0;
+  const safeMax = Math.max(max, 0);
+  const safeValue = Math.min(Math.max(value, 0), safeMax);
+  const percent =
+    safeMax > 0 ? Math.round((safeValue / safeMax) * 100) : 0;
 
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-xs text-slate-400">
         <span>
-          {value} von {max} Freunden haben diesen Anime geschaut
+          {safeValue} von {safeMax} Freunden haben diesen Anime geschaut
         </span>
         <span className="font-medium text-violet-400">{percent}%</span>
       </div>

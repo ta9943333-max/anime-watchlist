@@ -7,6 +7,7 @@ function mapRow(row: AnimeRow): AnimeEntry {
     id: row.id,
     title: row.title,
     watchedBy: row.watched_by,
+    folderId: row.folder_id ?? null,
     createdAt: row.created_at,
   };
 }
@@ -24,10 +25,13 @@ export async function fetchAnimeList(): Promise<AnimeEntry[]> {
   return data.map(mapRow);
 }
 
-export async function addAnime(title: string): Promise<AnimeEntry> {
+export async function addAnime(
+  title: string,
+  folderId: string | null = null,
+): Promise<AnimeEntry> {
   const { data, error } = await supabase
     .from("anime")
-    .insert({ title, watched_by: [] })
+    .insert({ title, watched_by: [], folder_id: folderId })
     .select("*")
     .single();
 
@@ -45,6 +49,20 @@ export async function updateWatchedBy(
   const { error } = await supabase
     .from("anime")
     .update({ watched_by: watchedBy })
+    .eq("id", animeId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function moveAnimeToFolder(
+  animeId: string,
+  folderId: string | null,
+): Promise<void> {
+  const { error } = await supabase
+    .from("anime")
+    .update({ folder_id: folderId })
     .eq("id", animeId);
 
   if (error) {
