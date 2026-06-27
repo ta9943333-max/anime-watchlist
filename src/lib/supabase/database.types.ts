@@ -33,6 +33,24 @@ export type Database = {
         };
         Relationships: [];
       };
+      members: {
+        Row: {
+          created_at: string;
+          id: string;
+          name: string;
+        };
+        Insert: {
+          created_at?: string;
+          id?: string;
+          name: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          name?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -50,3 +68,4 @@ export type Database = {
 };
 
 export type AnimeRow = Database["public"]["Tables"]["anime"]["Row"];
+export type MemberRow = Database["public"]["Tables"]["members"]["Row"];

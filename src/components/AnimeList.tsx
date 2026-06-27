@@ -1,15 +1,17 @@
 import { Film } from "lucide-react";
 import { AnimeCard } from "@/components/AnimeCard";
-import type { AnimeEntry, Friend } from "@/lib/types";
+import type { AnimeEntry, Member } from "@/lib/types";
 
 type AnimeListProps = {
   animeList: AnimeEntry[];
-  currentUser: Friend;
-  onToggleWatch: (animeId: string, friend: Friend) => void;
+  members: Member[];
+  currentUser: string;
+  onToggleWatch: (animeId: string, memberName: string) => void;
 };
 
 export function AnimeList({
   animeList,
+  members,
   currentUser,
   onToggleWatch,
 }: AnimeListProps) {
@@ -28,6 +30,7 @@ export function AnimeList({
         <AnimeCard
           key={anime.id}
           anime={anime}
+          members={members}
           currentUser={currentUser}
           onToggleWatch={onToggleWatch}
         />

@@ -1,14 +1,21 @@
 import { Check } from "lucide-react";
 import { ProgressBar } from "@/components/ProgressBar";
-import { FRIENDS, type AnimeEntry, type Friend } from "@/lib/types";
+import { sortMembersByName, type AnimeEntry, type Member } from "@/lib/types";
 
 type AnimeCardProps = {
   anime: AnimeEntry;
-  currentUser: Friend;
-  onToggleWatch: (animeId: string, friend: Friend) => void;
+  members: Member[];
+  currentUser: string;
+  onToggleWatch: (animeId: string, memberName: string) => void;
 };
 
-export function AnimeCard({ anime, currentUser, onToggleWatch }: AnimeCardProps) {
+export function AnimeCard({
+  anime,
+  members,
+  currentUser,
+  onToggleWatch,
+}: AnimeCardProps) {
+  const sortedMembers = sortMembersByName(members);
   const watchedCount = anime.watchedBy.length;
   const isWatchedByMe = anime.watchedBy.includes(currentUser);
 
@@ -29,16 +36,16 @@ export function AnimeCard({ anime, currentUser, onToggleWatch }: AnimeCardProps)
         )}
       </div>
 
-      <ProgressBar value={watchedCount} max={FRIENDS.length} />
+      <ProgressBar value={watchedCount} max={members.length} />
 
       <div className="mt-5 flex flex-wrap gap-3">
-        {FRIENDS.map((friend) => {
-          const isChecked = anime.watchedBy.includes(friend);
-          const isCurrentUser = friend === currentUser;
+        {sortedMembers.map((member) => {
+          const isChecked = anime.watchedBy.includes(member.name);
+          const isCurrentUser = member.name === currentUser;
 
           return (
             <label
-              key={friend}
+              key={member.id}
               className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-all ${
                 isChecked
                   ? "border-violet-500/40 bg-violet-600/15 text-violet-200"
@@ -48,7 +55,7 @@ export function AnimeCard({ anime, currentUser, onToggleWatch }: AnimeCardProps)
               <input
                 type="checkbox"
                 checked={isChecked}
-                onChange={() => onToggleWatch(anime.id, friend)}
+                onChange={() => onToggleWatch(anime.id, member.name)}
                 className="peer sr-only"
               />
               <span
@@ -60,7 +67,7 @@ export function AnimeCard({ anime, currentUser, onToggleWatch }: AnimeCardProps)
               >
                 {isChecked && <Check className="h-3.5 w-3.5" />}
               </span>
-              <span className="font-medium">{friend}</span>
+              <span className="font-medium">{member.name}</span>
               {isCurrentUser && (
                 <span className="text-xs text-violet-400">(Du)</span>
               )}

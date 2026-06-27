@@ -41,3 +41,46 @@ from (values
   ('Chainsaw Man', array['Alex'])
 ) as seed(title, watched_by)
 where not exists (select 1 from public.anime limit 1);
+
+-- Mitglieder (eigene Namen)
+create table if not exists public.members (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  created_at timestamptz not null default now()
+);
+
+alter table public.members enable row level security;
+
+create policy "members_select_public"
+  on public.members for select
+  using (true);
+
+create policy "members_insert_public"
+  on public.members for insert
+  with check (true);
+
+create policy "members_update_public"
+  on public.members for update
+  using (true);
+
+create policy "members_delete_public"
+  on public.members for delete
+  using (true);
+
+alter table public.members replica identity full;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and tablename = 'members'
+  ) then
+    alter publication supabase_realtime add table public.members;
+  end if;
+end $$;
+
+insert into public.members (name)
+select distinct unnest(watched_by)
+from public.anime
+where watched_by is not null
+on conflict (name) do nothing;

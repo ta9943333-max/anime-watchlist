@@ -1,12 +1,12 @@
 import { supabase } from "@/lib/supabase/client";
 import type { AnimeRow } from "@/lib/supabase/database.types";
-import type { AnimeEntry, Friend } from "@/lib/types";
+import type { AnimeEntry } from "@/lib/types";
 
 function mapRow(row: AnimeRow): AnimeEntry {
   return {
     id: row.id,
     title: row.title,
-    watchedBy: row.watched_by as Friend[],
+    watchedBy: row.watched_by,
     createdAt: row.created_at,
   };
 }
@@ -40,7 +40,7 @@ export async function addAnime(title: string): Promise<AnimeEntry> {
 
 export async function updateWatchedBy(
   animeId: string,
-  watchedBy: Friend[],
+  watchedBy: string[],
 ): Promise<void> {
   const { error } = await supabase
     .from("anime")

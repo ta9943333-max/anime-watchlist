@@ -5,6 +5,8 @@ import { AlertCircle, LogOut, Sparkles, Tv } from "lucide-react";
 import { AnimeForm } from "@/components/AnimeForm";
 import { AnimeList } from "@/components/AnimeList";
 import { FilterTabs } from "@/components/FilterTabs";
+import { SearchBar } from "@/components/SearchBar";
+import { SortTabs } from "@/components/SortTabs";
 import { UserSelector } from "@/components/UserSelector";
 import {
   addAnime,
@@ -13,37 +15,52 @@ import {
   updateWatchedBy,
 } from "@/lib/supabase/anime-service";
 import {
+  fetchMembers,
+  registerMember,
+  subscribeToMemberChanges,
+} from "@/lib/supabase/member-service";
+import {
   clearCurrentUser,
   loadCurrentUser,
   saveCurrentUser,
 } from "@/lib/storage";
-import { FRIENDS, type AnimeEntry, type FilterOption, type Friend } from "@/lib/types";
+import {
+  sortAnimeList,
+  sortMembersByName,
+  type AnimeEntry,
+  type FilterOption,
+  type Member,
+  type SortOption,
+} from "@/lib/types";
 
-function getInitialUser(): Friend | null {
-  const stored = loadCurrentUser();
-  if (stored && FRIENDS.includes(stored as Friend)) {
-    return stored as Friend;
-  }
-  return null;
+function getInitialUser(): string | null {
+  return loadCurrentUser();
 }
 
 export function WatchlistApp() {
-  const [currentUser, setCurrentUser] = useState<Friend | null>(getInitialUser);
+  const [currentUser, setCurrentUser] = useState<string | null>(getInitialUser);
+  const [members, setMembers] = useState<Member[]>([]);
   const [animeList, setAnimeList] = useState<AnimeEntry[]>([]);
   const [filter, setFilter] = useState<FilterOption>("all");
+  const [sort, setSort] = useState<SortOption>("newest");
+  const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [joinError, setJoinError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadAnime() {
-      setIsLoading(true);
-
+    async function loadData() {
       try {
-        const list = await fetchAnimeList();
+        const [list, memberList] = await Promise.all([
+          fetchAnimeList(),
+          fetchMembers(),
+        ]);
         if (!cancelled) {
           setAnimeList(list);
+          setMembers(memberList);
           setError(null);
         }
       } catch (err) {
@@ -61,21 +78,39 @@ export function WatchlistApp() {
       }
     }
 
-    void loadAnime();
+    void loadData();
 
-    const unsubscribe = subscribeToAnimeChanges(() => {
-      void loadAnime();
+    const unsubscribeAnime = subscribeToAnimeChanges(() => {
+      void loadData();
+    });
+    const unsubscribeMembers = subscribeToMemberChanges(() => {
+      void loadData();
     });
 
     return () => {
       cancelled = true;
-      unsubscribe();
+      unsubscribeAnime();
+      unsubscribeMembers();
     };
   }, []);
 
-  function handleSelectUser(user: Friend) {
-    setCurrentUser(user);
-    saveCurrentUser(user);
+  async function handleJoin(name: string) {
+    setIsJoining(true);
+    setJoinError(null);
+
+    try {
+      await registerMember(name);
+      const memberList = await fetchMembers();
+      setMembers(memberList);
+      setCurrentUser(name);
+      saveCurrentUser(name);
+    } catch (err) {
+      setJoinError(
+        err instanceof Error ? err.message : "Name konnte nicht gespeichert werden.",
+      );
+    } finally {
+      setIsJoining(false);
+    }
   }
 
   function handleLogout() {
@@ -95,14 +130,14 @@ export function WatchlistApp() {
     }
   }
 
-  async function handleToggleWatch(animeId: string, friend: Friend) {
+  async function handleToggleWatch(animeId: string, memberName: string) {
     const anime = animeList.find((entry) => entry.id === animeId);
     if (!anime) return;
 
-    const hasWatched = anime.watchedBy.includes(friend);
+    const hasWatched = anime.watchedBy.includes(memberName);
     const nextWatchedBy = hasWatched
-      ? anime.watchedBy.filter((name) => name !== friend)
-      : [...anime.watchedBy, friend];
+      ? anime.watchedBy.filter((name) => name !== memberName)
+      : [...anime.watchedBy, memberName];
 
     setAnimeList((prev) =>
       prev.map((entry) =>
@@ -125,10 +160,12 @@ export function WatchlistApp() {
     }
   }
 
+  const sortedMembers = useMemo(() => sortMembersByName(members), [members]);
+
   const filteredList = useMemo(() => {
     if (!currentUser) return [];
 
-    return animeList.filter((anime) => {
+    let list = animeList.filter((anime) => {
       const watchedByMe = anime.watchedBy.includes(currentUser);
 
       switch (filter) {
@@ -140,7 +177,16 @@ export function WatchlistApp() {
           return true;
       }
     });
-  }, [animeList, currentUser, filter]);
+
+    if (search.trim()) {
+      const query = search.trim().toLowerCase();
+      list = list.filter((anime) =>
+        anime.title.toLowerCase().includes(query),
+      );
+    }
+
+    return sortAnimeList(list, sort);
+  }, [animeList, currentUser, filter, search, sort]);
 
   const stats = useMemo(() => {
     if (!currentUser) return { total: 0, watched: 0, unwatched: 0 };
@@ -157,7 +203,14 @@ export function WatchlistApp() {
   }, [animeList, currentUser]);
 
   if (!currentUser) {
-    return <UserSelector onSelect={handleSelectUser} />;
+    return (
+      <UserSelector
+        members={sortedMembers}
+        onJoin={handleJoin}
+        isSubmitting={isJoining}
+        error={joinError}
+      />
+    );
   }
 
   return (
@@ -182,6 +235,8 @@ export function WatchlistApp() {
               <p className="mt-1 text-slate-400">
                 Eingeloggt als{" "}
                 <span className="font-medium text-violet-300">{currentUser}</span>
+                {" · "}
+                {sortedMembers.length} in der Gruppe
               </p>
             </div>
 
@@ -224,7 +279,9 @@ export function WatchlistApp() {
 
         <section className="mb-8 space-y-4">
           <AnimeForm onAdd={handleAddAnime} />
+          <SearchBar value={search} onChange={setSearch} />
           <FilterTabs active={filter} onChange={setFilter} />
+          <SortTabs active={sort} onChange={setSort} />
         </section>
 
         <section>
@@ -235,6 +292,7 @@ export function WatchlistApp() {
           ) : (
             <AnimeList
               animeList={filteredList}
+              members={sortedMembers}
               currentUser={currentUser}
               onToggleWatch={handleToggleWatch}
             />
@@ -242,8 +300,7 @@ export function WatchlistApp() {
         </section>
 
         <p className="mt-8 text-center text-xs text-slate-600">
-          Alle Freunde sehen dieselbe Liste in Echtzeit · Teile die App-URL nach
-          dem Deploy
+          Namen alphabetisch · Sortierung wählbar · Suche nach Titel
         </p>
       </div>
     </div>
