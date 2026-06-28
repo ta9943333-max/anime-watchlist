@@ -23,8 +23,10 @@ import {
   addPayloadFromDiscoverItem,
 } from "@/lib/mal/discover-utils";
 import {
-  fetchMalBrowse,
-  fetchMalRandom,
+  pickRandomCatalogItem,
+} from "@/lib/anilist/catalog-store";
+import { useAnilistCatalog } from "@/lib/anilist/use-anilist-catalog";
+import {
   fetchMalSeason,
   fetchMalTop,
   hydrateDiscoverImages,
@@ -85,16 +87,16 @@ const VIEW_META: Record<
   },
   all: {
     label: "All Anime",
-    title: "All anime on MyAnimeList",
+    title: "All anime on AniList",
     description:
-      "Browse the full MAL catalog — 25 per page, sorted by popularity. Mark Completed or Watching to update your stats.",
+      "Browse the complete AniList catalog — loaded once and cached globally. Mark Completed or Watching to update your stats.",
     icon: Globe2,
   },
   airing: {
     label: "Airing",
     title: "Currently airing",
     description:
-      "Shows running right now with live countdown to the next episode.",
+      "All currently releasing anime from the cached AniList catalog with live countdown.",
     icon: Tv,
   },
   upcoming: {
@@ -121,9 +123,66 @@ const PICK_MODE_META: Record<
   lucky: {
     label: "Feeling lucky",
     description:
-      "One random anime from all of MyAnimeList — each roll picks from the entire catalog.",
+      "Random pick from the full cached AniList catalog — every roll uses the complete list.",
   },
 };
+
+const CATALOG_PAGE_SIZE = 25;
+
+function discoverItemKey(item: DiscoverItem): string {
+  return String(item.anilistId ?? item.malId);
+}
+
+function CatalogProgress({
+  loadedPages,
+  totalPages,
+  totalItems,
+  loadedCount,
+}: {
+  loadedPages: number;
+  totalPages: number | null;
+  totalItems: number | null;
+  loadedCount: number;
+}) {
+  const progress =
+    totalPages && totalPages > 0
+      ? Math.min(100, Math.round((loadedPages / totalPages) * 100))
+      : null;
+
+  return (
+    <div className="rounded-xl border border-sky-500/30 bg-sky-950/20 px-4 py-4">
+      <div className="flex items-center gap-3 text-sm text-sky-200">
+        <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+        <p>
+          Loading AniList catalog…{" "}
+          <span className="font-semibold text-white">
+            {loadedCount.toLocaleString()}
+          </span>
+          {totalItems != null && (
+            <>
+              {" "}
+              / {totalItems.toLocaleString()} anime
+            </>
+          )}
+          {totalPages != null && (
+            <span className="text-sky-300/80">
+              {" "}
+              · page {loadedPages} / {totalPages}
+            </span>
+          )}
+        </p>
+      </div>
+      {progress != null && (
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-800">
+          <div
+            className="h-full rounded-full bg-sky-500 transition-all duration-300"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
 
 function BrowsePagination({
   pagination,
@@ -162,7 +221,7 @@ function BrowsePagination({
         <span className="font-semibold text-sky-300">
           {pagination.total.toLocaleString()}
         </span>{" "}
-        anime on MAL
+        anime in catalog
       </p>
 
       <button
@@ -240,6 +299,10 @@ async function enrichItems(items: DiscoverItem[]): Promise<DiscoverItem[]> {
   return hydrateDiscoverImages(enriched);
 }
 
+function viewUsesCatalog(activeView: DiscoverView): boolean {
+  return activeView === "all" || activeView === "airing";
+}
+
 export function MalDiscover({
   animeList,
   currentUser,
@@ -247,13 +310,11 @@ export function MalDiscover({
   onAddWithStatus,
   onSetMyStatus,
 }: MalDiscoverProps) {
+  const catalog = useAnilistCatalog();
   const [view, setView] = useState<DiscoverView>("pick");
   const [pickMode, setPickMode] = useState<PickMode>("season");
   const [luckyPick, setLuckyPick] = useState<DiscoverItem | null>(null);
-  const [isRolling, setIsRolling] = useState(false);
   const [allPage, setAllPage] = useState(1);
-  const [browsePagination, setBrowsePagination] =
-    useState<MalPagination | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [resultState, setResultState] = useState<ResultState>({
@@ -267,7 +328,7 @@ export function MalDiscover({
   const loadSeqRef = useRef(0);
   const sectionRef = useRef<HTMLElement>(null);
 
-  const results =
+  const apiResults =
     resultState.view === view ? resultState.items : [];
 
   const watchlistByMalId = useMemo(() => {
@@ -278,37 +339,73 @@ export function MalDiscover({
     return map;
   }, [animeList]);
 
+  const catalogWithMeta = useMemo(() => {
+    let items = catalog.items;
+    if (view === "airing") {
+      items = items.filter((item) =>
+        isCurrentlyAiring(releaseFieldsFromAnime(item)),
+      );
+    }
+    return attachWatchlistMeta(items, animeList, currentUser);
+  }, [catalog.items, view, animeList, currentUser]);
+
+  const catalogPagination = useMemo((): MalPagination | null => {
+    if (view !== "all" || catalogWithMeta.length === 0) return null;
+    const total = catalog.totalItems ?? catalogWithMeta.length;
+    const lastPage = Math.max(
+      1,
+      Math.ceil(catalogWithMeta.length / CATALOG_PAGE_SIZE),
+    );
+    return {
+      currentPage: allPage,
+      lastVisiblePage: lastPage,
+      hasNextPage: allPage < lastPage,
+      total,
+      perPage: CATALOG_PAGE_SIZE,
+      count: Math.min(
+        CATALOG_PAGE_SIZE,
+        catalogWithMeta.length - (allPage - 1) * CATALOG_PAGE_SIZE,
+      ),
+    };
+  }, [view, catalogWithMeta.length, catalog.totalItems, allPage]);
+
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 350);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const rollLucky = useCallback(async () => {
-    setIsRolling(true);
-    try {
-      const random = await fetchMalRandom();
-      let items = await enrichItems([random]);
-      items = attachWatchlistMeta(items, animeList, currentUser);
-      setLuckyPick(items[0] ?? null);
-    } catch {
+  const rollLucky = useCallback(() => {
+    const random = pickRandomCatalogItem();
+    if (!random) {
       setLuckyPick(null);
-    } finally {
-      setIsRolling(false);
+      return;
     }
-  }, [animeList, currentUser]);
+    setLuckyPick(
+      attachWatchlistMeta([random], animeList, currentUser)[0] ?? null,
+    );
+  }, [animeList, currentUser, catalog.items.length]);
 
   useEffect(() => {
+    if (
+      view === "pick" &&
+      pickMode === "lucky" &&
+      catalog.items.length > 0 &&
+      !luckyPick
+    ) {
+      rollLucky();
+    }
+  }, [view, pickMode, catalog.items.length, luckyPick, rollLucky]);
+
+  useEffect(() => {
+    if (viewUsesCatalog(view)) return;
+
     const activeView = view;
     const activePickMode = pickMode;
-    const activeAllPage = allPage;
     const seq = ++loadSeqRef.current;
     setResultState({ view: activeView, items: [] });
     setIsLoading(true);
     if (activeView !== "pick" || activePickMode !== "lucky") {
       setLuckyPick(null);
-    }
-    if (activeView !== "all") {
-      setBrowsePagination(null);
     }
 
     async function load() {
@@ -337,27 +434,9 @@ export function MalDiscover({
           return;
         }
 
-        if (activeView === "all") {
-          const { results, pagination } = await fetchMalBrowse(activeAllPage);
-          let items = dedupeByMalId(results);
-          items = await enrichItems(items);
-          if (seq !== loadSeqRef.current) return;
-          setBrowsePagination(pagination);
-          setResultState({
-            view: activeView,
-            items: attachWatchlistMeta(items, animeList, currentUser),
-          });
-          sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-          return;
-        }
-
         if (activeView === "pick") {
           if (activePickMode === "lucky") {
-            const random = await fetchMalRandom();
-            let items = await enrichItems([random]);
-            items = attachWatchlistMeta(items, animeList, currentUser);
             if (seq !== loadSeqRef.current) return;
-            setLuckyPick(items[0] ?? null);
             setResultState({ view: activeView, items: [] });
             return;
           }
@@ -412,20 +491,33 @@ export function MalDiscover({
     }
 
     void load();
-  }, [view, pickMode, debouncedQuery, animeList, currentUser, allPage]);
+  }, [view, pickMode, debouncedQuery, animeList, currentUser]);
+
+  useEffect(() => {
+    if (!viewUsesCatalog(view)) return;
+    setIsLoading(catalog.items.length === 0 && catalog.status === "loading");
+  }, [view, catalog.items.length, catalog.status]);
+
+  useEffect(() => {
+    if (view === "all") {
+      sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [allPage, view]);
+
+  const sourceResults = viewUsesCatalog(view) ? catalogWithMeta : apiResults;
 
   const genres = useMemo(() => {
     const set = new Set<string>();
-    for (const result of results) {
+    for (const result of sourceResults) {
       for (const genre of result.genres) {
         set.add(genre);
       }
     }
     return [...set].sort();
-  }, [results]);
+  }, [sourceResults]);
 
   const filteredResults = useMemo(() => {
-    let list = results;
+    let list = sourceResults;
 
     if (genreFilter) {
       list = list.filter((result) =>
@@ -451,14 +543,36 @@ export function MalDiscover({
     }
 
     if (view === "all") {
-      return list;
+      const start = (allPage - 1) * CATALOG_PAGE_SIZE;
+      return list.slice(start, start + CATALOG_PAGE_SIZE);
+    }
+
+    if (view === "airing") {
+      return sortByCountdown(list);
     }
 
     return sortByCountdown(list);
-  }, [results, genreFilter, statusFilter, searchQuery, view, pickMode]);
+  }, [
+    sourceResults,
+    genreFilter,
+    statusFilter,
+    searchQuery,
+    view,
+    pickMode,
+    allPage,
+  ]);
+
+  const catalogIsLoading =
+    catalog.status === "loading" || catalog.status === "idle";
+  const showLucky = view === "pick" && pickMode === "lucky";
+  const showCatalogProgress =
+    catalogIsLoading && (viewUsesCatalog(view) || showLucky);
+  const listIsLoading = viewUsesCatalog(view)
+    ? catalog.items.length === 0 && catalogIsLoading
+    : isLoading && !showLucky;
 
   async function handleAdd(item: DiscoverItem) {
-    setAddingId(item.malId);
+    setAddingId(item.malId || item.anilistId || null);
     try {
       await onAdd(addPayloadFromDiscoverItem(item));
     } finally {
@@ -470,7 +584,7 @@ export function MalDiscover({
     item: DiscoverItem,
     status: AnimeStatus,
   ) {
-    setAddingId(item.malId);
+    setAddingId(item.malId || item.anilistId || null);
     try {
       await onAddWithStatus(addPayloadFromDiscoverItem(item), status);
     } finally {
@@ -491,10 +605,10 @@ export function MalDiscover({
 
     return (
       <DiscoverAnimeCard
-        key={result.malId}
+        key={discoverItemKey(item)}
         anime={item}
         alreadyAdded={Boolean(inList ?? result.watchlistId)}
-        isAdding={addingId === result.malId}
+        isAdding={addingId === (result.malId || result.anilistId)}
         onAdd={() => void handleAdd(result)}
         onAddWithStatus={(status) => void handleAddWithStatus(result, status)}
         allowQuickStatus={view === "all" || view === "search"}
@@ -504,7 +618,6 @@ export function MalDiscover({
   }
 
   const meta = VIEW_META[view];
-  const showLucky = view === "pick" && pickMode === "lucky";
 
   return (
     <section ref={sectionRef} className="space-y-8">
@@ -564,7 +677,8 @@ export function MalDiscover({
                 onClick={() => {
                   setPickMode(mode);
                   setResultState({ view: "pick", items: [] });
-                  setIsLoading(true);
+                  if (mode === "lucky") setLuckyPick(null);
+                  if (mode !== "lucky") setIsLoading(true);
                 }}
                 className={`rounded-full px-4 py-2 text-sm font-medium transition ${
                   pickMode === mode
@@ -679,7 +793,23 @@ export function MalDiscover({
         </>
       )}
 
-      {view === "search" && debouncedQuery.length < 2 && !isLoading && (
+      {showCatalogProgress && (
+        <CatalogProgress
+          loadedPages={catalog.loadedPages}
+          totalPages={catalog.totalPages}
+          totalItems={catalog.totalItems}
+          loadedCount={catalog.items.length}
+        />
+      )}
+
+      {catalog.status === "error" &&
+        (viewUsesCatalog(view) || showLucky) && (
+          <p className="rounded-xl border border-red-500/30 bg-red-950/30 px-4 py-3 text-sm text-red-200">
+            AniList catalog failed: {catalog.error}
+          </p>
+        )}
+
+      {view === "search" && debouncedQuery.length < 2 && !listIsLoading && (
         <div className="flex items-center gap-2 text-sm text-slate-500">
           <Sparkles className="h-4 w-4 text-amber-400" />
           Showing popular anime — type to search all of MyAnimeList.
@@ -688,28 +818,34 @@ export function MalDiscover({
 
       {!showLucky && (
         <p className="text-xs uppercase tracking-wide text-slate-500">
-          {view === "all" && browsePagination
-            ? `${browsePagination.total.toLocaleString()} anime on MAL · showing ${filteredResults.length} on this page`
-            : `${filteredResults.length} titles`}
+          {view === "all" && catalogPagination
+            ? `${catalogPagination.total.toLocaleString()} anime in catalog · showing ${filteredResults.length} on this page`
+            : view === "airing" && catalog.totalItems
+              ? `${filteredResults.length} airing · ${catalog.items.length.toLocaleString()} loaded`
+              : `${filteredResults.length} titles`}
         </p>
       )}
 
-      {view === "all" && browsePagination && !isLoading && (
+      {view === "all" && catalogPagination && !listIsLoading && (
         <BrowsePagination
-          pagination={browsePagination}
+          pagination={catalogPagination}
           page={allPage}
-          isLoading={isLoading}
+          isLoading={listIsLoading}
           onPageChange={setAllPage}
         />
       )}
 
-      {isLoading ? (
+      {listIsLoading ? (
         <div className="flex items-center justify-center gap-3 py-24 text-slate-400">
           <Loader2 className="h-6 w-6 animate-spin" />
           Loading…
         </div>
       ) : showLucky ? (
-        luckyPick ? (
+        catalog.items.length === 0 && catalogIsLoading ? (
+          <p className="py-24 text-center text-slate-500">
+            Waiting for AniList catalog…
+          </p>
+        ) : luckyPick ? (
           <div className="space-y-6">
             <div className="flex flex-col items-center gap-4 rounded-2xl border border-amber-500/30 bg-amber-950/20 px-6 py-8 text-center">
               <Dices className="h-10 w-10 text-amber-400" />
@@ -718,31 +854,22 @@ export function MalDiscover({
                   Tonight&apos;s pick
                 </p>
                 <p className="mt-1 text-sm text-slate-400">
-                  Random from all of MyAnimeList — every roll is a new title
+                  Random from{" "}
+                  {(catalog.totalItems ?? catalog.items.length).toLocaleString()}{" "}
+                  anime in the cached catalog
                 </p>
               </div>
               <button
                 type="button"
-                disabled={isRolling}
-                onClick={() => void rollLucky()}
+                disabled={catalog.items.length === 0}
+                onClick={() => rollLucky()}
                 className="inline-flex items-center gap-2 rounded-xl border border-amber-500/50 bg-amber-600/20 px-5 py-2.5 text-sm font-medium text-amber-100 transition hover:bg-amber-600/35 disabled:opacity-50"
               >
-                {isRolling ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Dices className="h-4 w-4" />
-                )}
+                <Dices className="h-4 w-4" />
                 Feeling lucky — roll again
               </button>
             </div>
-            {isRolling ? (
-              <div className="flex items-center justify-center gap-3 py-12 text-slate-400">
-                <Loader2 className="h-6 w-6 animate-spin" />
-                Rolling…
-              </div>
-            ) : (
-              renderDiscoverCard(luckyPick)
-            )}
+            {renderDiscoverCard(luckyPick)}
           </div>
         ) : (
           <p className="py-24 text-center text-slate-500">
@@ -756,11 +883,11 @@ export function MalDiscover({
       ) : (
         <div className="flex flex-col gap-8">
           {filteredResults.map((result) => renderDiscoverCard(result))}
-          {view === "all" && browsePagination && (
+          {view === "all" && catalogPagination && (
             <BrowsePagination
-              pagination={browsePagination}
+              pagination={catalogPagination}
               page={allPage}
-              isLoading={isLoading}
+              isLoading={listIsLoading}
               onPageChange={setAllPage}
             />
           )}

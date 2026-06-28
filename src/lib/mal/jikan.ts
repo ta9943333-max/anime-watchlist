@@ -27,6 +27,7 @@ export type MalSearchResult = {
 };
 
 export type DiscoverItem = MalSearchResult & {
+  anilistId?: number;
   watchlistId?: string;
   myStatus?: AnimeStatus;
 };
