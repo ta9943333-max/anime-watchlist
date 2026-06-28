@@ -2,12 +2,17 @@ import {
   FINISHED_STATUSES,
   getMemberStatus,
   getMemberStatusUpdatedAt,
-  getMemberProgressEpisodes,
-  getMemberProgressMinutes,
   getMemberRewatchCount,
   STATUS_OPTIONS,
   type AnimeStatus,
 } from "@/lib/statuses";
+import {
+  formatWatchDays,
+  formatWatchHours,
+} from "@/lib/anime/runtime";
+import {
+  computeWatchContribution,
+} from "@/lib/stats/watch-progress";
 import {
   getAverageRating,
   getDisplayTitle,
@@ -130,18 +135,11 @@ function computeMemberStats(
     }
 
     const status = getMemberStatus(anime.memberStatuses, memberName);
-    const progressEpisodes = getMemberProgressEpisodes(
-      anime.memberStatuses,
-      memberName,
-      anime.episodes,
-    );
-    const progressMinutes = getMemberProgressMinutes(
-      anime.memberStatuses,
-      memberName,
-      anime.episodes,
-      anime.episodeDurationMin,
-      anime.totalDurationMin,
-    );
+    const contribution = computeWatchContribution(anime, memberName);
+    if (!contribution) continue;
+
+    const progressEpisodes = contribution.episodes;
+    const progressMinutes = contribution.minutes;
 
     if (progressEpisodes <= 0 && progressMinutes <= 0) continue;
 
@@ -198,7 +196,7 @@ function computeMemberStats(
     bucket.completedCount = Math.round(bucket.completedCount * 10) / 10;
     bucket.episodesWatched = Math.round(bucket.episodesWatched);
     bucket.totalMinutes = Math.round(bucket.totalMinutes);
-    bucket.totalHours = Math.round((bucket.totalMinutes / 60) * 10) / 10;
+    bucket.totalHours = formatWatchHours(bucket.totalMinutes);
   }
 
   const topGenres = [...genreCounts.entries()]
@@ -211,8 +209,8 @@ function computeMemberStats(
     completedCount: Math.round(completedCount * 10) / 10,
     episodesWatched: Math.round(episodesWatched),
     totalMinutes: Math.round(totalMinutes),
-    totalHours: Math.round((totalMinutes / 60) * 10) / 10,
-    daysWatched: Math.round((totalMinutes / 60 / 24) * 10) / 10,
+    totalHours: formatWatchHours(totalMinutes),
+    daysWatched: formatWatchDays(totalMinutes),
     averageRating:
       ratedCount > 0 ? Math.round((ratingSum / ratedCount) * 10) / 10 : 0,
     ratedCount,
@@ -365,26 +363,17 @@ export function buildMonthlyRecap(
       );
       if (!isInMonth(updatedAt, year, month)) continue;
 
+      const contribution = computeWatchContribution(anime, member.name);
+      if (!contribution) continue;
+
       const times =
         status === "rewatching"
           ? getMemberRewatchCount(anime.memberStatuses, member.name)
           : 1;
-      const progressEpisodes = getMemberProgressEpisodes(
-        anime.memberStatuses,
-        member.name,
-        anime.episodes,
-      );
-      const progressMinutes = getMemberProgressMinutes(
-        anime.memberStatuses,
-        member.name,
-        anime.episodes,
-        anime.episodeDurationMin,
-        anime.totalDurationMin,
-      );
 
       completedCount += times;
-      episodesWatched += progressEpisodes;
-      totalMinutes += progressMinutes;
+      episodesWatched += contribution.episodes;
+      totalMinutes += contribution.minutes;
       titles.push(getDisplayTitle(anime));
     }
 
@@ -392,7 +381,7 @@ export function buildMonthlyRecap(
       name: member.name,
       completedCount: Math.round(completedCount * 10) / 10,
       episodesWatched: Math.round(episodesWatched),
-      totalHours: Math.round((totalMinutes / 60) * 10) / 10,
+      totalHours: formatWatchHours(totalMinutes),
       titles,
     };
   });

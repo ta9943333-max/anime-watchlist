@@ -40,33 +40,61 @@ export function parseMalDuration(
   duration: string | null | undefined,
   episodes: number | null,
 ): { episodeDurationMin: number | null; totalDurationMin: number | null } {
-  if (!duration) {
+  if (!duration?.trim()) {
     return { episodeDurationMin: null, totalDurationMin: null };
   }
 
-  const perEpMatch = duration.match(/(\d+)\s*min per ep/i);
-  if (perEpMatch && episodes) {
+  const normalized = duration.trim();
+  const epCount =
+    episodes != null && episodes > 0 ? Math.floor(episodes) : null;
+
+  const perEpMatch = normalized.match(/(\d+)\s*min\.?\s*per ep/i);
+  if (perEpMatch) {
     const episodeDurationMin = Number(perEpMatch[1]);
     return {
       episodeDurationMin,
-      totalDurationMin: episodeDurationMin * episodes,
+      totalDurationMin:
+        epCount != null ? episodeDurationMin * epCount : null,
     };
   }
 
-  const hrMinMatch = duration.match(/(?:(\d+)\s*hr)?\s*(?:(\d+)\s*min)?/i);
-  if (hrMinMatch) {
+  const hrMinMatch = normalized.match(
+    /(?:(\d+)\s*hr\.?\s*)?(?:(\d+)\s*min\.?)?/i,
+  );
+  if (hrMinMatch && (hrMinMatch[1] || hrMinMatch[2])) {
     const hours = Number(hrMinMatch[1] || 0);
     const mins = Number(hrMinMatch[2] || 0);
     const total = hours * 60 + mins;
     if (total > 0) {
+      if (epCount == null || epCount <= 1) {
+        return { episodeDurationMin: total, totalDurationMin: total };
+      }
+      if (total % epCount === 0) {
+        return {
+          episodeDurationMin: total / epCount,
+          totalDurationMin: total,
+        };
+      }
+      if (total < 120) {
+        return {
+          episodeDurationMin: total,
+          totalDurationMin: total * epCount,
+        };
+      }
       return { episodeDurationMin: total, totalDurationMin: total };
     }
   }
 
-  const minOnly = duration.match(/(\d+)\s*min/i);
+  const minOnly = normalized.match(/^(\d+)\s*min\.?$/i);
   if (minOnly) {
-    const total = Number(minOnly[1]);
-    return { episodeDurationMin: total, totalDurationMin: total };
+    const mins = Number(minOnly[1]);
+    if (epCount != null && epCount > 1) {
+      return {
+        episodeDurationMin: mins,
+        totalDurationMin: mins * epCount,
+      };
+    }
+    return { episodeDurationMin: mins, totalDurationMin: mins };
   }
 
   return { episodeDurationMin: null, totalDurationMin: null };

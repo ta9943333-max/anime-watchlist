@@ -82,12 +82,12 @@ export const STATUS_OPTIONS: {
   },
 ];
 
-import { resolveAnimeRuntime } from "@/lib/anime/runtime";
+import {
+  getExactRuntime,
+  minutesForEpisodesWatched,
+} from "@/lib/anime/runtime";
 
 export const FINISHED_STATUSES: AnimeStatus[] = ["completed", "rewatching"];
-
-/** Fallback when MAL has no runtime data (typical TV episode length). */
-export const DEFAULT_EPISODE_DURATION_MIN = 24;
 
 export function getStatusMeta(status: AnimeStatus) {
   return (
@@ -197,7 +197,7 @@ export function setMemberStatus(
           : previous?.episodesWatched != null
             ? previous.episodesWatched
             : undefined;
-      if (resolved != null && resolved >= 0) {
+      if (resolved != null && resolved > 0) {
         entry.episodesWatched = resolved;
       }
     }
@@ -258,24 +258,24 @@ export function getMemberProgressEpisodes(
   totalDurationMin: number | null = null,
 ): number {
   const status = getMemberStatus(statuses, memberName);
-  const runtime = resolveAnimeRuntime({
+  const runtime = getExactRuntime({
     episodes: totalEpisodes,
     episodeDurationMin,
     totalDurationMin,
   });
-  const total = runtime.episodes;
+  if (!runtime) return 0;
 
   if (status === "rewatching") {
-    return total * getMemberRewatchCount(statuses, memberName);
+    return runtime.episodes * getMemberRewatchCount(statuses, memberName);
   }
 
   if (FINISHED_STATUSES.includes(status)) {
-    return total;
+    return runtime.episodes;
   }
 
   const progress = getMemberEpisodesWatched(statuses, memberName);
   if (statusShowsEpisodeProgress(status) && progress != null) {
-    return total > 0 ? Math.min(progress, total) : progress;
+    return Math.min(Math.floor(progress), runtime.episodes);
   }
 
   return 0;
@@ -291,20 +291,19 @@ export function getMemberProgressMinutes(
   const status = getMemberStatus(statuses, memberName);
   if (status === "none") return 0;
 
-  const runtime = resolveAnimeRuntime({
+  const runtime = getExactRuntime({
     episodes: totalEpisodes,
     episodeDurationMin,
     totalDurationMin,
   });
+  if (!runtime) return 0;
 
   if (status === "rewatching") {
-    return Math.round(
-      runtime.totalDurationMin * getMemberRewatchCount(statuses, memberName),
-    );
+    return runtime.totalDurationMin * getMemberRewatchCount(statuses, memberName);
   }
 
   if (status === "completed") {
-    return Math.round(runtime.totalDurationMin);
+    return runtime.totalDurationMin;
   }
 
   const watchedEps = getMemberProgressEpisodes(
@@ -316,15 +315,11 @@ export function getMemberProgressMinutes(
   );
   if (watchedEps <= 0) return 0;
 
-  if (
-    statusShowsEpisodeProgress(status) &&
-    runtime.episodes > 0 &&
-    runtime.totalDurationMin > 0
-  ) {
-    return Math.round((watchedEps / runtime.episodes) * runtime.totalDurationMin);
+  if (statusShowsEpisodeProgress(status)) {
+    return minutesForEpisodesWatched(watchedEps, runtime);
   }
 
-  return Math.round(watchedEps * runtime.episodeDurationMin);
+  return 0;
 }
 
 export function countFinishedMembers(

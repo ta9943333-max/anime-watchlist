@@ -1,7 +1,8 @@
 import { searchMalAnime, fetchMalAnimeDetails } from "@/lib/mal/jikan";
 import { mergeGenres, prettifySeriesKey, isLikelySeasonSequel } from "@/lib/mal/titles";
 import {
-  resolveAnimeRuntime,
+  getExactRuntime,
+  mergeMalRuntime,
   runtimeNeedsPersist,
 } from "@/lib/anime/runtime";
 import {
@@ -99,6 +100,12 @@ export async function fetchAnimeList(): Promise<AnimeEntry[]> {
 }
 
 export async function addAnime(payload: AddAnimePayload): Promise<AnimeEntry> {
+  const exact = getExactRuntime({
+    episodes: payload.episodes ?? null,
+    episodeDurationMin: payload.episodeDurationMin ?? null,
+    totalDurationMin: payload.totalDurationMin ?? null,
+  });
+
   const { data, error } = await supabase
     .from("anime")
     .insert({
@@ -111,9 +118,11 @@ export async function addAnime(payload: AddAnimePayload): Promise<AnimeEntry> {
       folder_id: payload.folderId ?? null,
       mal_id: payload.malId ?? null,
       anilist_id: payload.anilistId ?? null,
-      episodes: payload.episodes ?? null,
-      episode_duration_min: payload.episodeDurationMin ?? null,
-      total_duration_min: payload.totalDurationMin ?? null,
+      episodes: exact?.episodes ?? payload.episodes ?? null,
+      episode_duration_min:
+        exact?.episodeDurationMin ?? payload.episodeDurationMin ?? null,
+      total_duration_min:
+        exact?.totalDurationMin ?? payload.totalDurationMin ?? null,
       genres: payload.genres ?? [],
       ratings: {},
       ...releasePayload(payload),
@@ -302,29 +311,36 @@ export async function updateAnimeRuntimeFields(
   return mapRow(data);
 }
 
-/** Fill and persist episode/runtime data so completed stats always count. */
+/** Fetch and persist exact MAL runtime — never invents placeholder values. */
 export async function ensureAnimeHasRuntime(
   anime: AnimeEntry,
 ): Promise<AnimeEntry> {
-  if (anime.malId && anime.malId > 0) {
-    const details = await fetchMalAnimeDetails([anime.malId]);
-    const mal = details.get(anime.malId);
-    if (mal && (mal.totalDurationMin || mal.episodes)) {
-      const resolved = resolveAnimeRuntime({
-        episodes: mal.episodes ?? anime.episodes,
-        episodeDurationMin: mal.episodeDurationMin ?? anime.episodeDurationMin,
-        totalDurationMin: mal.totalDurationMin ?? anime.totalDurationMin,
-      });
-      return updateAnimeRuntimeFields(anime.id, resolved);
-    }
-  }
-
-  if (!runtimeNeedsPersist(anime)) {
+  const exact = getExactRuntime(anime);
+  if (exact && !runtimeNeedsPersist(anime)) {
     return anime;
   }
 
-  const resolved = resolveAnimeRuntime(anime);
-  return updateAnimeRuntimeFields(anime.id, resolved);
+  if (anime.malId && anime.malId > 0) {
+    const details = await fetchMalAnimeDetails([anime.malId]);
+    const mal = details.get(anime.malId);
+    if (mal) {
+      const merged = mergeMalRuntime(anime, mal);
+      if (merged) {
+        return updateAnimeRuntimeFields(anime.id, merged);
+      }
+    }
+  }
+
+  if (!anime.malId || anime.malId <= 0) {
+    const enriched = await enrichAnimeFromMal(anime);
+    const enrichedExact = getExactRuntime(enriched);
+    if (enrichedExact) {
+      return updateAnimeRuntimeFields(enriched.id, enrichedExact);
+    }
+    return enriched;
+  }
+
+  return anime;
 }
 
 export function applyAnimeMetadataPatch(
@@ -409,9 +425,8 @@ export async function enrichMissingMalMetadata(
 ): Promise<AnimeEntry[]> {
   const missing = animeList.filter(
     (anime) =>
-      !anime.totalDurationMin ||
+      !getExactRuntime(anime) ||
       !anime.airedFrom ||
-      !anime.episodes ||
       runtimeNeedsPersist(anime),
   );
   if (missing.length === 0) {
@@ -423,10 +438,10 @@ export async function enrichMissingMalMetadata(
   for (const anime of missing) {
     try {
       let enriched = anime;
-      if (!anime.totalDurationMin || !anime.airedFrom || !anime.malId) {
+      if (!getExactRuntime(anime) || !anime.airedFrom || !anime.malId) {
         enriched = await enrichAnimeFromMal(anime);
       }
-      if (runtimeNeedsPersist(enriched)) {
+      if (!getExactRuntime(enriched) || runtimeNeedsPersist(enriched)) {
         enriched = await ensureAnimeHasRuntime(enriched);
       }
       updated.set(anime.id, enriched);
@@ -447,26 +462,13 @@ function metadataNeedsReconcile(
     totalDurationMin: number | null;
   },
 ): boolean {
-  if (!anime.totalDurationMin || !anime.episodeDurationMin || !anime.episodes) {
-    return true;
-  }
+  if (!getExactRuntime(anime)) return true;
   if (runtimeNeedsPersist(anime)) return true;
-  if (mal.episodes != null && anime.episodes !== mal.episodes) return true;
-  if (
-    mal.episodes != null &&
-    anime.episodes != null &&
-    anime.episodes > mal.episodes
-  ) {
-    return true;
-  }
-  if (
-    mal.totalDurationMin != null &&
-    anime.totalDurationMin != null &&
-    mal.totalDurationMin > 0 &&
-    anime.totalDurationMin > mal.totalDurationMin * 2
-  ) {
-    return true;
-  }
+  const malExact = mergeMalRuntime(anime, mal);
+  if (!malExact) return false;
+  if (anime.episodes !== malExact.episodes) return true;
+  if (anime.episodeDurationMin !== malExact.episodeDurationMin) return true;
+  if (anime.totalDurationMin !== malExact.totalDurationMin) return true;
   return false;
 }
 
@@ -485,20 +487,18 @@ export async function reconcileAnimeMetadata(
       if (!mal || !metadataNeedsReconcile(anime, mal)) continue;
 
       try {
-        const resolved = resolveAnimeRuntime({
-          episodes: mal.episodes ?? anime.episodes,
-          episodeDurationMin: mal.episodeDurationMin ?? anime.episodeDurationMin,
-          totalDurationMin: mal.totalDurationMin ?? anime.totalDurationMin,
-        });
+        const merged = mergeMalRuntime(anime, mal);
+        if (!merged) continue;
+
         const fixed = await updateAnimeMalMetadata(anime.id, {
           malId: mal.malId,
           title: mal.title,
           titleEnglish: mal.titleEnglish,
           seriesKey: mal.seriesKey,
           malStatus: mal.malStatus,
-          episodes: resolved.episodes,
-          episodeDurationMin: resolved.episodeDurationMin,
-          totalDurationMin: resolved.totalDurationMin,
+          episodes: merged.episodes,
+          episodeDurationMin: merged.episodeDurationMin,
+          totalDurationMin: merged.totalDurationMin,
           genres: mergeGenres(anime.genres, mal.genres),
           airedFrom: mal.airedFrom ?? anime.airedFrom,
           airedTo: mal.airedTo ?? anime.airedTo,

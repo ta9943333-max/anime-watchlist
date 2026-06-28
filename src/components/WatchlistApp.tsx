@@ -57,11 +57,11 @@ import {
   saveCurrentUser,
 } from "@/lib/storage";
 import { buildMonthlyRecap, type MonthlyRecap } from "@/lib/stats/leaderboard";
+import { computeWatchContribution } from "@/lib/stats/watch-progress";
+import { formatWatchDays, formatWatchHours, getExactRuntime } from "@/lib/anime/runtime";
 import {
   getMemberStatus,
   getMemberEpisodesWatched,
-  getMemberProgressEpisodes,
-  getMemberProgressMinutes,
   isFinishedStatus,
   setMemberStatus,
   setMemberEpisodesWatched,
@@ -218,6 +218,16 @@ export function WatchlistApp() {
         }
 
         let ready = list;
+        if (
+          list.length > 0 &&
+          list.every(
+            (anime) =>
+              Object.keys(anime.memberStatuses).length === 0 &&
+              Object.keys(anime.ratings).length === 0,
+          )
+        ) {
+          clearLocalProgressCache();
+        }
         try {
           markLocalWrite();
           ready = await reconcileAnimeMetadata(list);
@@ -604,16 +614,37 @@ export function WatchlistApp() {
     if (!anime) return;
 
     markLocalWrite();
-    const nextStatuses = setMemberEpisodesWatched(
-      anime.memberStatuses,
+
+    let runtimeAnime = anime;
+    try {
+      runtimeAnime = await ensureAnimeHasRuntime(anime);
+    } catch {
+      runtimeAnime = anime;
+    }
+
+    let nextStatuses = setMemberEpisodesWatched(
+      runtimeAnime.memberStatuses,
       currentUser,
       episodesWatched,
     );
 
+    if (
+      nextStatuses === runtimeAnime.memberStatuses &&
+      episodesWatched > 0 &&
+      getMemberStatus(runtimeAnime.memberStatuses, currentUser) === "none"
+    ) {
+      nextStatuses = setMemberStatus(
+        runtimeAnime.memberStatuses,
+        currentUser,
+        "watching",
+        episodesWatched,
+      );
+    }
+
     setAnimeList((prev) =>
       prev.map((entry) =>
         entry.id === animeId
-          ? { ...entry, memberStatuses: nextStatuses }
+          ? { ...entry, ...runtimeAnime, memberStatuses: nextStatuses }
           : entry,
       ),
     );
@@ -688,6 +719,28 @@ export function WatchlistApp() {
             ),
           );
         }
+        if (!getExactRuntime(runtimeAnime)) {
+          setError(
+            "Laufzeit konnte nicht von MyAnimeList geladen werden — Status nicht gespeichert.",
+          );
+          return;
+        }
+      } catch {
+        setError(
+          "Laufzeit konnte nicht geladen werden — Status nicht gespeichert.",
+        );
+        return;
+      }
+    } else if (statusShowsEpisodeProgress(status)) {
+      try {
+        runtimeAnime = await ensureAnimeHasRuntime(anime);
+        if (runtimeAnime !== anime) {
+          setAnimeList((prev) =>
+            prev.map((entry) =>
+              entry.id === animeId ? { ...entry, ...runtimeAnime } : entry,
+            ),
+          );
+        }
       } catch {
         runtimeAnime = anime;
       }
@@ -701,12 +754,18 @@ export function WatchlistApp() {
     if (
       statusShowsEpisodeProgress(status) &&
       isFinishedStatus(previousStatus) &&
+      status === "watching" &&
       runtimeAnime.episodes != null
     ) {
       episodesWatched = runtimeAnime.episodes;
     } else if (statusShowsEpisodeProgress(status)) {
-      episodesWatched =
-        getMemberEpisodesWatched(runtimeAnime.memberStatuses, currentUser) ?? 0;
+      const previous = getMemberEpisodesWatched(
+        runtimeAnime.memberStatuses,
+        currentUser,
+      );
+      if (previous != null && previous > 0) {
+        episodesWatched = previous;
+      }
     }
 
     markLocalWrite();
@@ -782,42 +841,27 @@ export function WatchlistApp() {
     let minutes = 0;
 
     for (const anime of animeList) {
-      const status = getMemberStatus(anime.memberStatuses, currentUser);
-      if (status === "none") continue;
+      const contribution = computeWatchContribution(anime, currentUser);
+      if (!contribution) continue;
 
-      const watchedEps = getMemberProgressEpisodes(
-        anime.memberStatuses,
-        currentUser,
-        anime.episodes,
-        anime.episodeDurationMin,
-        anime.totalDurationMin,
-      );
-      const watchedMins = getMemberProgressMinutes(
-        anime.memberStatuses,
-        currentUser,
-        anime.episodes,
-        anime.episodeDurationMin,
-        anime.totalDurationMin,
-      );
-
-      if (isFinishedStatus(status)) {
-        series += 1;
-        episodes += watchedEps;
-        minutes += watchedMins;
+      if (contribution.countsAsFinishedSeries) {
+        series += contribution.rewatchTimes;
+        episodes += contribution.episodes;
+        minutes += contribution.minutes;
         continue;
       }
 
-      if (watchedEps <= 0 && watchedMins <= 0) continue;
+      if (contribution.episodes <= 0 && contribution.minutes <= 0) continue;
 
-      episodes += watchedEps;
-      minutes += watchedMins;
+      episodes += contribution.episodes;
+      minutes += contribution.minutes;
     }
 
     return {
       series,
       episodes,
-      hours: Math.round((minutes / 60) * 10) / 10,
-      days: Math.round((minutes / 60 / 24) * 10) / 10,
+      hours: formatWatchHours(minutes),
+      days: formatWatchDays(minutes),
     };
   }, [animeList, currentUser]);
 
