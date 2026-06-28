@@ -27,6 +27,7 @@ type LeaderboardProps = {
   currentUser: string;
   isSyncingMal: boolean;
   onSyncMal: () => void;
+  onOpenProfile: (name: string) => void;
 };
 
 const POPULAR_GENRES = [
@@ -63,16 +64,20 @@ function StatRow({
   primary,
   secondary,
   highlight,
+  onClick,
 }: {
   rank: number;
   member: MemberLeaderboardStats;
   primary: string;
   secondary?: string;
   highlight?: boolean;
+  onClick: () => void;
 }) {
   return (
-    <div
-      className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition hover:border-violet-500/50 ${
         highlight
           ? "border-violet-500/40 bg-violet-600/10"
           : "border-slate-800/80 bg-slate-900/50"
@@ -86,7 +91,7 @@ function StatRow({
         )}
       </div>
       <p className="shrink-0 text-sm font-semibold text-violet-300">{primary}</p>
-    </div>
+    </button>
   );
 }
 
@@ -96,6 +101,7 @@ export function Leaderboard({
   currentUser,
   isSyncingMal,
   onSyncMal,
+  onOpenProfile,
 }: LeaderboardProps) {
   const [tab, setTab] = useState<LeaderboardTab>("rankings");
 
@@ -191,6 +197,7 @@ export function Leaderboard({
                 primary={`${member.completedCount} Serien`}
                 secondary={`${member.episodesWatched} Folgen · ${member.totalHours}h · ${member.daysWatched} Tage`}
                 highlight={member.name === currentUser}
+                onClick={() => onOpenProfile(member.name)}
               />
             ))
           )}
@@ -207,6 +214,7 @@ export function Leaderboard({
               primary={`${member.totalHours} Stunden`}
               secondary={`${member.daysWatched} Tage · ${member.episodesWatched} Folgen`}
               highlight={member.name === currentUser}
+              onClick={() => onOpenProfile(member.name)}
             />
           ))}
           {hoursRanking.every((m) => m.totalMinutes === 0) && (

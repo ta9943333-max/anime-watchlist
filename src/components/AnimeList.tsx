@@ -13,6 +13,7 @@ type AnimeListProps = {
   onRenameAnime: (animeId: string, title: string) => Promise<void>;
   onDeleteAnime: (animeId: string) => Promise<void>;
   onRateAnime: (animeId: string, rating: number) => void;
+  onOpenProfile: (name: string) => void;
   emptyMessage?: string;
 };
 
@@ -26,6 +27,7 @@ export function AnimeList({
   onRenameAnime,
   onDeleteAnime,
   onRateAnime,
+  onOpenProfile,
   emptyMessage = "Keine Anime in dieser Ansicht.",
 }: AnimeListProps) {
   if (animeList.length === 0) {
@@ -51,6 +53,7 @@ export function AnimeList({
           onRenameAnime={onRenameAnime}
           onDeleteAnime={onDeleteAnime}
           onRateAnime={onRateAnime}
+          onOpenProfile={onOpenProfile}
         />
       ))}
     </div>

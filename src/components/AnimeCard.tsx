@@ -7,7 +7,6 @@ import { StatusBadge } from "@/components/StatusBadge";
 import {
   countFinishedMembers,
   getMemberStatus,
-  getStatusMeta,
   isFinishedStatus,
   STATUS_OPTIONS,
   type AnimeStatus,
@@ -30,6 +29,7 @@ type AnimeCardProps = {
   onRenameAnime: (animeId: string, title: string) => Promise<void>;
   onDeleteAnime: (animeId: string) => Promise<void>;
   onRateAnime: (animeId: string, rating: number) => void;
+  onOpenProfile: (name: string) => void;
 };
 
 const RATING_VALUES = Array.from({ length: 10 }, (_, index) => index + 1);
@@ -44,6 +44,7 @@ export function AnimeCard({
   onRenameAnime,
   onDeleteAnime,
   onRateAnime,
+  onOpenProfile,
 }: AnimeCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(anime.title);
@@ -54,7 +55,6 @@ export function AnimeCard({
   const memberNames = sortedMembers.map((m) => m.name);
   const finishedCount = countFinishedMembers(anime.memberStatuses, memberNames);
   const myStatus = getMemberStatus(anime.memberStatuses, currentUser);
-  const myMeta = getStatusMeta(myStatus);
   const otherMembers = sortedMembers.filter((m) => m.name !== currentUser);
   const myRating = anime.ratings[currentUser] ?? 0;
   const { average, count } = getAverageRating(anime.ratings);
@@ -189,18 +189,25 @@ export function AnimeCard({
 
       <div className="mt-5 space-y-4">
         <div className="rounded-xl border border-violet-500/30 bg-violet-600/10 p-4">
-          <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-violet-300">
-            Dein Status (nur du kannst das ändern)
-          </label>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <label className="block text-xs font-medium uppercase tracking-wide text-violet-300">
+              Dein Status (nur du kannst das ändern)
+            </label>
+            {myStatus !== "none" && <StatusBadge status={myStatus} />}
+          </div>
           <select
             value={myStatus}
             onChange={(event) =>
               onSetMyStatus(anime.id, event.target.value as AnimeStatus)
             }
-            className={`w-full rounded-xl border bg-slate-950/80 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-violet-500/30 ${myMeta.color}`}
+            className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-500/60 focus:ring-2 focus:ring-violet-500/30"
           >
             {STATUS_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
+              <option
+                key={option.value}
+                value={option.value}
+                className="bg-slate-950 text-white"
+              >
                 {option.label}
               </option>
             ))}
@@ -246,9 +253,11 @@ export function AnimeCard({
                 const rating = anime.ratings[member.name] ?? 0;
 
                 return (
-                  <div
+                  <button
                     key={member.id}
-                    className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2"
+                    type="button"
+                    onClick={() => onOpenProfile(member.name)}
+                    className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2 transition hover:border-violet-500/40 hover:bg-violet-600/10"
                   >
                     <span className="text-sm font-medium text-slate-300">
                       {member.name}
@@ -260,7 +269,7 @@ export function AnimeCard({
                         {rating}
                       </span>
                     )}
-                  </div>
+                  </button>
                 );
               })}
             </div>

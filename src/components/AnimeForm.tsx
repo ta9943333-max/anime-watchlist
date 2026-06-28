@@ -37,14 +37,15 @@ export function AnimeForm({
 
   useEffect(() => {
     const trimmed = query.trim();
-    if (trimmed.length < 2) {
-      setResults([]);
-      setIsSearching(false);
-      return;
-    }
 
-    setIsSearching(true);
     const timer = setTimeout(() => {
+      if (trimmed.length < 2) {
+        setResults([]);
+        setIsSearching(false);
+        return;
+      }
+
+      setIsSearching(true);
       void searchMalAnime(trimmed)
         .then((items) => {
           setResults(items);
@@ -56,7 +57,7 @@ export function AnimeForm({
         .finally(() => {
           setIsSearching(false);
         });
-    }, 350);
+    }, 300);
 
     return () => clearTimeout(timer);
   }, [query]);

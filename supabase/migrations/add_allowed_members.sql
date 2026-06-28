@@ -30,5 +30,7 @@ create policy "members_insert_whitelist"
 insert into public.allowed_members (name) values
   ('Ricardo'),
   ('Leonard'),
-  ('Alex')
+  ('Alex'),
+  ('Russell'),
+  ('Tom')
 on conflict (name) do nothing;

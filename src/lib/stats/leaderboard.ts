@@ -2,6 +2,8 @@ import {
   FINISHED_STATUSES,
   getMemberStatus,
   getMemberStatusUpdatedAt,
+  STATUS_OPTIONS,
+  type AnimeStatus,
 } from "@/lib/statuses";
 import { getAverageRating, type AnimeEntry, type Member } from "@/lib/types";
 
@@ -135,6 +137,52 @@ export function buildLeaderboard(
   return members
     .map((member) => computeMemberStats(member.name, animeList))
     .sort((a, b) => b.completedCount - a.completedCount);
+}
+
+export type MemberProfileGroup = {
+  status: AnimeStatus;
+  label: string;
+  items: { id: string; title: string; rating: number }[];
+};
+
+export type MemberProfile = {
+  stats: MemberLeaderboardStats;
+  groups: MemberProfileGroup[];
+};
+
+export function buildMemberProfile(
+  name: string,
+  animeList: AnimeEntry[],
+): MemberProfile {
+  const stats = computeMemberStats(name, animeList);
+  const grouped = new Map<
+    AnimeStatus,
+    { id: string; title: string; rating: number }[]
+  >();
+
+  for (const anime of animeList) {
+    const status = getMemberStatus(anime.memberStatuses, name);
+    if (status === "none") continue;
+    const list = grouped.get(status) ?? [];
+    list.push({
+      id: anime.id,
+      title: anime.title,
+      rating: anime.ratings[name] ?? 0,
+    });
+    grouped.set(status, list);
+  }
+
+  const groups: MemberProfileGroup[] = STATUS_OPTIONS.filter(
+    (option) => option.value !== "none" && grouped.has(option.value),
+  ).map((option) => ({
+    status: option.value,
+    label: option.label,
+    items: (grouped.get(option.value) ?? []).sort((a, b) =>
+      a.title.localeCompare(b.title, "de", { sensitivity: "base" }),
+    ),
+  }));
+
+  return { stats, groups };
 }
 
 export function getTopGenreLeader(

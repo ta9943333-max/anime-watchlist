@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, List, LogOut, Sparkles, Trophy, Tv } from "lucide-react";
 import { AnimeForm } from "@/components/AnimeForm";
 import { AnimeList } from "@/components/AnimeList";
 import { FilterTabs } from "@/components/FilterTabs";
 import { FolderSection } from "@/components/FolderSection";
 import { Leaderboard } from "@/components/Leaderboard";
+import { MemberProfileModal } from "@/components/MemberProfileModal";
 import { SearchBar } from "@/components/SearchBar";
 import { SortTabs } from "@/components/SortTabs";
 import { UserSelector } from "@/components/UserSelector";
@@ -80,7 +81,9 @@ export function WatchlistApp() {
   const [accessMode, setAccessMode] = useState<"open" | "site" | "member">(
     "open",
   );
+  const [profileName, setProfileName] = useState<string | null>(null);
   const [folderSetupNeeded, setFolderSetupNeeded] = useState(false);
+  const didAutoSyncRef = useRef(false);
 
   useEffect(() => {
     void fetch("/api/access")
@@ -125,6 +128,24 @@ export function WatchlistApp() {
           setAllowedNames(allowed);
           setFolders(folderList);
           setError(null);
+        }
+
+        if (!cancelled && !didAutoSyncRef.current) {
+          const missing = list.filter((anime) => !anime.totalDurationMin);
+          if (missing.length > 0) {
+            didAutoSyncRef.current = true;
+            setIsSyncingMal(true);
+            void enrichMissingMalMetadata(list)
+              .then((enriched) => {
+                if (!cancelled) {
+                  setAnimeList((prev) => mergeAnimeLists(prev, enriched));
+                }
+              })
+              .catch(() => {})
+              .finally(() => {
+                if (!cancelled) setIsSyncingMal(false);
+              });
+          }
         }
       } catch (err) {
         if (!cancelled) {
@@ -492,7 +513,13 @@ export function WatchlistApp() {
               </h1>
               <p className="mt-1 text-slate-400">
                 Eingeloggt als{" "}
-                <span className="font-medium text-violet-300">{currentUser}</span>
+                <button
+                  type="button"
+                  onClick={() => setProfileName(currentUser)}
+                  className="font-medium text-violet-300 underline-offset-2 hover:underline"
+                >
+                  {currentUser}
+                </button>
                 {" · "}
                 {sortedMembers.length} in der Gruppe
               </p>
@@ -565,6 +592,7 @@ export function WatchlistApp() {
               currentUser={currentUser}
               isSyncingMal={isSyncingMal}
               onSyncMal={() => void handleSyncMal()}
+              onOpenProfile={setProfileName}
             />
           )
         ) : (
@@ -621,6 +649,7 @@ export function WatchlistApp() {
               onRenameAnime={handleRenameAnime}
               onDeleteAnime={handleDeleteAnime}
               onRateAnime={handleRateAnime}
+              onOpenProfile={setProfileName}
             />
 
             {!openFolderId && (
@@ -646,6 +675,7 @@ export function WatchlistApp() {
                   onRenameAnime={handleRenameAnime}
                   onDeleteAnime={handleDeleteAnime}
                   onRateAnime={handleRateAnime}
+                  onOpenProfile={setProfileName}
                 />
               </section>
             )}
@@ -654,6 +684,15 @@ export function WatchlistApp() {
           </>
         )}
       </div>
+
+      {profileName && (
+        <MemberProfileModal
+          name={profileName}
+          animeList={animeList}
+          isCurrentUser={profileName === currentUser}
+          onClose={() => setProfileName(null)}
+        />
+      )}
     </div>
   );
 }
