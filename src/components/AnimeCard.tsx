@@ -1,14 +1,19 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { FolderInput, Pencil, Star, Trash2, X, Check } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  Check,
+  FolderInput,
+  Pencil,
+  Star,
+  Trash2,
+  X,
+} from "lucide-react";
+import { AnimeLiveChartCard } from "@/components/AnimeLiveChartCard";
 import { EpisodeProgressField } from "@/components/EpisodeProgressField";
 import { ProgressBar } from "@/components/ProgressBar";
-import {
-  AnimeReleaseBadge,
-  releaseFieldsFromAnime,
-} from "@/components/AnimeReleaseBadge";
 import { StatusBadge } from "@/components/StatusBadge";
+import { fetchMalAnimeDetails } from "@/lib/mal/jikan";
 import {
   countFinishedMembers,
   getMemberStatus,
@@ -59,6 +64,12 @@ export function AnimeCard({
   const [editTitle, setEditTitle] = useState(anime.title);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [malDetails, setMalDetails] = useState<{
+    imageUrl: string | null;
+    synopsis: string | null;
+    studios: string[];
+    score: number | null;
+  } | null>(null);
 
   const displayTitle = getDisplayTitle(anime);
   const sortedMembers = sortMembersByName(members);
@@ -70,6 +81,55 @@ export function AnimeCard({
   const otherMembers = sortedMembers.filter((m) => m.name !== currentUser);
   const myRating = anime.ratings[currentUser] ?? 0;
   const { average, count } = getAverageRating(anime.ratings);
+
+  useEffect(() => {
+    if (!anime.malId || anime.malId <= 0) return;
+
+    let cancelled = false;
+    void fetchMalAnimeDetails([anime.malId]).then((map) => {
+      if (cancelled) return;
+      const details = map.get(anime.malId!);
+      if (!details) return;
+      setMalDetails({
+        imageUrl: details.imageUrl,
+        synopsis: details.synopsis,
+        studios: details.studios,
+        score: details.score,
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [anime.malId]);
+
+  const cardData = useMemo(
+    () => ({
+      title: displayTitle,
+      genres: anime.genres,
+      malId: anime.malId,
+      imageUrl: malDetails?.imageUrl ?? null,
+      studios: malDetails?.studios ?? [],
+      score: malDetails?.score ?? null,
+      episodes: anime.episodes,
+      episodeDurationMin: anime.episodeDurationMin,
+      synopsis: malDetails?.synopsis ?? null,
+      airedFrom: anime.airedFrom,
+      airedTo: anime.airedTo,
+      broadcastDay: anime.broadcastDay,
+      broadcastTime: anime.broadcastTime,
+      malSeason: anime.malSeason,
+      malYear: anime.malYear,
+      malStatus: anime.malStatus,
+    }),
+    [anime, displayTitle, malDetails],
+  );
+
+  const accentClassName = isFinishedStatus(myStatus)
+    ? "ring-1 ring-emerald-500/25"
+    : myStatus !== "none"
+      ? "ring-1 ring-violet-500/20"
+      : undefined;
 
   async function handleRenameSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -109,224 +169,198 @@ export function AnimeCard({
   }
 
   return (
-    <article
-      className={`rounded-xl border p-5 transition-all ${
-        isFinishedStatus(myStatus)
-          ? "border-emerald-500/30 bg-emerald-950/20"
-          : myStatus !== "none"
-            ? "border-violet-500/20 bg-slate-900/50"
-            : "border-slate-800/80 bg-slate-900/50"
-      }`}
-    >
-      <div className="mb-4 flex items-start justify-between gap-3">
-        {isEditing ? (
-          <form
-            onSubmit={handleRenameSubmit}
-            className="flex min-w-0 flex-1 items-center gap-2"
-          >
-            <input
-              value={editTitle}
-              onChange={(event) => setEditTitle(event.target.value)}
-              maxLength={120}
-              autoFocus
-              className="min-w-0 flex-1 rounded-lg border border-violet-500/40 bg-slate-950/80 px-3 py-2 text-white outline-none focus:ring-2 focus:ring-violet-500/30"
-            />
-            <button
-              type="submit"
-              disabled={isSaving || !editTitle.trim()}
-              className="rounded-lg border border-emerald-500/40 p-2 text-emerald-300 transition hover:bg-emerald-950/40 disabled:opacity-40"
-              title="Speichern"
-            >
-              <Check className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setIsEditing(false);
-                setEditTitle(anime.title);
-              }}
-              className="rounded-lg border border-slate-700 p-2 text-slate-400 transition hover:bg-slate-800"
-              title="Abbrechen"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </form>
-        ) : (
-          <>
-            <div className="min-w-0 flex-1">
-              <h3 className="text-lg font-semibold text-white">{displayTitle}</h3>
-              {anime.episodes && (
-                <p className="mt-0.5 text-xs text-slate-500">
-                  {anime.episodes} episodes
-                  {anime.totalDurationMin
-                    ? ` · ${Math.round((anime.totalDurationMin / 60) * 10) / 10}h`
-                    : ""}
-                </p>
-              )}
-              <div className="mt-2">
-                <AnimeReleaseBadge info={releaseFieldsFromAnime(anime)} />
-              </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              {myStatus !== "none" && <StatusBadge status={myStatus} />}
+    <AnimeLiveChartCard
+      anime={cardData}
+      accentClassName={accentClassName}
+      headerRight={
+        <>
+          {myStatus !== "none" && <StatusBadge status={myStatus} />}
+          {!isEditing && (
+            <>
               <button
                 type="button"
                 onClick={() => setIsEditing(true)}
-                className="rounded-lg border border-slate-800 p-2 text-slate-400 transition hover:border-violet-500/40 hover:text-violet-300"
+                className="rounded-lg border border-slate-700 p-1.5 text-slate-400 transition hover:border-violet-500/40 hover:text-violet-300"
                 title="Umbenennen"
               >
-                <Pencil className="h-4 w-4" />
+                <Pencil className="h-3.5 w-3.5" />
               </button>
               <button
                 type="button"
                 onClick={() => void handleDelete()}
                 disabled={isDeleting}
-                className="rounded-lg border border-slate-800 p-2 text-slate-400 transition hover:border-red-500/40 hover:text-red-300 disabled:opacity-40"
+                className="rounded-lg border border-slate-700 p-1.5 text-slate-400 transition hover:border-red-500/40 hover:text-red-300 disabled:opacity-40"
                 title="Löschen"
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="h-3.5 w-3.5" />
               </button>
-            </div>
-          </>
-        )}
-      </div>
-
-      {anime.genres.length > 0 && (
-        <div className="mb-4 flex flex-wrap gap-1.5">
-          {anime.genres.map((genre) => (
-            <span
-              key={genre}
-              className="rounded-md border border-slate-800 bg-slate-950/60 px-2 py-0.5 text-xs text-slate-400"
+            </>
+          )}
+        </>
+      }
+      actions={
+        <div className="space-y-4">
+          {isEditing && (
+            <form
+              onSubmit={handleRenameSubmit}
+              className="flex flex-wrap items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-950/20 p-3"
             >
-              {genre}
-            </span>
-          ))}
-        </div>
-      )}
-
-      <ProgressBar
-        value={finishedCount}
-        max={members.length}
-        label="haben abgeschlossen"
-      />
-
-      <div className="mt-5 space-y-4">
-        <div className="rounded-xl border border-violet-500/30 bg-violet-600/10 p-4">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <label className="block text-xs font-medium uppercase tracking-wide text-violet-300">
-              Dein Status (nur du kannst das ändern)
-            </label>
-            {myStatus !== "none" && <StatusBadge status={myStatus} />}
-          </div>
-          <select
-            value={myStatus}
-            onChange={(event) =>
-              onSetMyStatus(anime.id, event.target.value as AnimeStatus)
-            }
-            className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-violet-500/60 focus:ring-2 focus:ring-violet-500/30"
-          >
-            {STATUS_OPTIONS.map((option) => (
-              <option
-                key={option.value}
-                value={option.value}
-                className="bg-slate-950 text-white"
+              <input
+                value={editTitle}
+                onChange={(event) => setEditTitle(event.target.value)}
+                maxLength={120}
+                autoFocus
+                className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-violet-500/30"
+              />
+              <button
+                type="submit"
+                disabled={isSaving || !editTitle.trim()}
+                className="rounded-lg border border-emerald-500/40 p-2 text-emerald-300 transition hover:bg-emerald-950/40 disabled:opacity-40"
+                title="Speichern"
               >
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <EpisodeProgressField
-            status={myStatus}
-            totalEpisodes={anime.episodes}
-            episodesWatched={myEpisodesWatched}
-            onEpisodesWatchedChange={(value) =>
-              onSetEpisodesWatched(anime.id, value)
-            }
+                <Check className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditing(false);
+                  setEditTitle(anime.title);
+                }}
+                className="rounded-lg border border-slate-700 p-2 text-slate-400 transition hover:bg-slate-800"
+                title="Abbrechen"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </form>
+          )}
+
+          <ProgressBar
+            value={finishedCount}
+            max={members.length}
+            label="haben abgeschlossen"
           />
-        </div>
 
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <label className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-amber-300">
-              <Star className="h-3.5 w-3.5" />
-              Deine Bewertung
-            </label>
-            {count > 0 && (
-              <span className="text-xs text-slate-400">
-                Ø {average} · {count} {count === 1 ? "Stimme" : "Stimmen"}
-              </span>
-            )}
-          </div>
-          <select
-            value={myRating}
-            onChange={(event) =>
-              onRateAnime(anime.id, Number(event.target.value))
-            }
-            className="w-full rounded-xl border border-amber-500/30 bg-slate-950/80 px-3 py-2.5 text-sm text-amber-100 outline-none focus:ring-2 focus:ring-amber-500/30"
-          >
-            <option value={0}>Keine Bewertung</option>
-            {RATING_VALUES.map((value) => (
-              <option key={value} value={value}>
-                {value} / 10
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {otherMembers.length > 0 && (
-          <div>
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-              Andere in der Gruppe
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {otherMembers.map((member) => {
-                const status = getMemberStatus(anime.memberStatuses, member.name);
-                const rating = anime.ratings[member.name] ?? 0;
-
-                return (
-                  <button
-                    key={member.id}
-                    type="button"
-                    onClick={() => onOpenProfile(member.name)}
-                    className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2 transition hover:border-violet-500/40 hover:bg-violet-600/10"
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-lg border border-violet-500/25 bg-violet-950/20 p-3">
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-violet-300">
+                Dein Status
+              </label>
+              <select
+                value={myStatus}
+                onChange={(event) =>
+                  onSetMyStatus(anime.id, event.target.value as AnimeStatus)
+                }
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-violet-500/60"
+              >
+                {STATUS_OPTIONS.map((option) => (
+                  <option
+                    key={option.value}
+                    value={option.value}
+                    className="bg-slate-950 text-white"
                   >
-                    <span className="text-sm font-medium text-slate-300">
-                      {member.name}
-                    </span>
-                    <StatusBadge status={status} compact />
-                    {rating > 0 && (
-                      <span className="flex items-center gap-0.5 text-xs font-medium text-amber-300">
-                        <Star className="h-3 w-3" />
-                        {rating}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <EpisodeProgressField
+                status={myStatus}
+                totalEpisodes={anime.episodes}
+                episodesWatched={myEpisodesWatched}
+                compact
+                onEpisodesWatchedChange={(value) =>
+                  onSetEpisodesWatched(anime.id, value)
+                }
+              />
+            </div>
+
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <label className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-amber-300">
+                  <Star className="h-3.5 w-3.5" />
+                  Deine Bewertung
+                </label>
+                {count > 0 && (
+                  <span className="text-xs text-slate-400">
+                    Ø {average} · {count}
+                  </span>
+                )}
+              </div>
+              <select
+                value={myRating}
+                onChange={(event) =>
+                  onRateAnime(anime.id, Number(event.target.value))
+                }
+                className="w-full rounded-lg border border-amber-500/30 bg-slate-950/80 px-3 py-2 text-sm text-amber-100 outline-none focus:ring-2 focus:ring-amber-500/30"
+              >
+                <option value={0}>Keine Bewertung</option>
+                {RATING_VALUES.map((value) => (
+                  <option key={value} value={value}>
+                    {value} / 10
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
-        )}
-      </div>
 
-      {folders.length > 0 && (
-        <div className="mt-4 flex items-center gap-2">
-          <FolderInput className="h-4 w-4 shrink-0 text-slate-500" />
-          <select
-            value={anime.folderId ?? ""}
-            onChange={(event) =>
-              onMoveToFolder(anime.id, event.target.value || null)
-            }
-            className="flex-1 rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2 text-sm text-slate-300 outline-none focus:border-violet-500/50"
-          >
-            <option value="">Allgemeine Liste</option>
-            {folders.map((folder) => (
-              <option key={folder.id} value={folder.id}>
-                {folder.name}
-              </option>
-            ))}
-          </select>
+          {otherMembers.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+                Andere in der Gruppe
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {otherMembers.map((member) => {
+                  const status = getMemberStatus(
+                    anime.memberStatuses,
+                    member.name,
+                  );
+                  const rating = anime.ratings[member.name] ?? 0;
+
+                  return (
+                    <button
+                      key={member.id}
+                      type="button"
+                      onClick={() => onOpenProfile(member.name)}
+                      className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-1.5 transition hover:border-violet-500/40 hover:bg-violet-600/10"
+                    >
+                      <span className="text-sm font-medium text-slate-300">
+                        {member.name}
+                      </span>
+                      <StatusBadge status={status} compact />
+                      {rating > 0 && (
+                        <span className="flex items-center gap-0.5 text-xs font-medium text-amber-300">
+                          <Star className="h-3 w-3" />
+                          {rating}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
-      )}
-    </article>
+      }
+      footerExtra={
+        folders.length > 0 ? (
+          <div className="flex items-center gap-2">
+            <FolderInput className="h-4 w-4 shrink-0 text-slate-500" />
+            <select
+              value={anime.folderId ?? ""}
+              onChange={(event) =>
+                onMoveToFolder(anime.id, event.target.value || null)
+              }
+              className="rounded-lg border border-slate-800 bg-slate-950/80 px-2 py-1.5 text-xs text-slate-300 outline-none focus:border-violet-500/50"
+            >
+              <option value="">Allgemeine Liste</option>
+              {folders.map((folder) => (
+                <option key={folder.id} value={folder.id}>
+                  {folder.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : undefined
+      }
+    />
   );
 }

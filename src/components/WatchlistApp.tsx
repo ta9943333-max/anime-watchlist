@@ -43,11 +43,13 @@ import {
 } from "@/lib/storage";
 import {
   getMemberStatus,
+  getMemberEpisodesWatched,
   getMemberProgressEpisodes,
   getMemberProgressMinutes,
   isFinishedStatus,
   setMemberStatus,
   setMemberEpisodesWatched,
+  statusShowsEpisodeProgress,
   type AnimeStatus,
 } from "@/lib/statuses";
 import {
@@ -90,6 +92,15 @@ export function WatchlistApp() {
   const [profileName, setProfileName] = useState<string | null>(null);
   const [folderSetupNeeded, setFolderSetupNeeded] = useState(false);
   const didAutoSyncRef = useRef(false);
+  const skipRemoteSyncUntilRef = useRef(0);
+
+  function markLocalWrite() {
+    skipRemoteSyncUntilRef.current = Date.now() + 2000;
+  }
+
+  function shouldSkipRemoteSync() {
+    return Date.now() < skipRemoteSyncUntilRef.current;
+  }
 
   useEffect(() => {
     void fetch("/api/access")
@@ -173,12 +184,15 @@ export function WatchlistApp() {
     void loadData();
 
     const unsubscribeAnime = subscribeToAnimeChanges(() => {
+      if (shouldSkipRemoteSync()) return;
       void loadData();
     });
     const unsubscribeMembers = subscribeToMemberChanges(() => {
+      if (shouldSkipRemoteSync()) return;
       void loadData();
     });
     const unsubscribeFolders = subscribeToFolderChanges(() => {
+      if (shouldSkipRemoteSync()) return;
       void loadData();
     });
 
@@ -228,6 +242,7 @@ export function WatchlistApp() {
 
   async function handleAddAnime(payload: AddAnimePayload) {
     try {
+      markLocalWrite();
       const { entry, merged } = await addOrMergeAnime(payload, animeList);
       setAnimeList((prev) => {
         if (merged) {
@@ -237,43 +252,6 @@ export function WatchlistApp() {
           return prev;
         }
         return [entry, ...prev];
-      });
-      setError(null);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Anime konnte nicht gespeichert werden.",
-      );
-    }
-  }
-
-  async function handleAddWithStatus(
-    payload: AddAnimePayload,
-    status: AnimeStatus,
-  ) {
-    if (!currentUser) return;
-
-    try {
-      const { entry, merged } = await addOrMergeAnime(payload, animeList);
-      const nextStatuses = setMemberStatus(
-        entry.memberStatuses,
-        currentUser,
-        status,
-      );
-      await updateMemberStatuses(entry.id, nextStatuses);
-      const updatedEntry = { ...entry, memberStatuses: nextStatuses };
-
-      setAnimeList((prev) => {
-        if (merged) {
-          return prev.map((item) =>
-            item.id === updatedEntry.id ? updatedEntry : item,
-          );
-        }
-        if (prev.some((item) => item.id === updatedEntry.id)) {
-          return prev.map((item) =>
-            item.id === updatedEntry.id ? updatedEntry : item,
-          );
-        }
-        return [updatedEntry, ...prev];
       });
       setError(null);
     } catch (err) {
@@ -462,6 +440,7 @@ export function WatchlistApp() {
     const anime = animeList.find((entry) => entry.id === animeId);
     if (!anime) return;
 
+    markLocalWrite();
     const nextStatuses = setMemberEpisodesWatched(
       anime.memberStatuses,
       currentUser,
@@ -497,10 +476,25 @@ export function WatchlistApp() {
     const anime = animeList.find((entry) => entry.id === animeId);
     if (!anime) return;
 
+    const previousStatus = getMemberStatus(anime.memberStatuses, currentUser);
+    let episodesWatched: number | undefined;
+    if (
+      statusShowsEpisodeProgress(status) &&
+      isFinishedStatus(previousStatus) &&
+      anime.episodes != null
+    ) {
+      episodesWatched = anime.episodes;
+    } else if (statusShowsEpisodeProgress(status)) {
+      episodesWatched =
+        getMemberEpisodesWatched(anime.memberStatuses, currentUser) ?? 0;
+    }
+
+    markLocalWrite();
     const nextStatuses = setMemberStatus(
       anime.memberStatuses,
       currentUser,
       status,
+      episodesWatched,
     );
 
     setAnimeList((prev) =>
@@ -732,20 +726,13 @@ export function WatchlistApp() {
             />
           )
         ) : viewTab === "discover" ? (
-          isLoading ? (
-            <div className="flex justify-center py-16">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-violet-500 border-t-transparent" />
-            </div>
-          ) : (
-            <MalDiscover
-              animeList={animeList}
-              currentUser={currentUser}
-              onAdd={handleAddAnime}
-              onAddWithStatus={handleAddWithStatus}
-              onSetMyStatus={handleSetMyStatus}
-              onSetEpisodesWatched={handleSetEpisodesWatched}
-            />
-          )
+          <MalDiscover
+            animeList={animeList}
+            currentUser={currentUser}
+            onAdd={handleAddAnime}
+            onSetMyStatus={handleSetMyStatus}
+            onSetEpisodesWatched={handleSetEpisodesWatched}
+          />
         ) : (
           <>
         {error && (

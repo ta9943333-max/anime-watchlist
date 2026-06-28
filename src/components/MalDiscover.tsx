@@ -55,10 +55,6 @@ type MalDiscoverProps = {
   animeList: AnimeEntry[];
   currentUser: string;
   onAdd: (payload: AddAnimePayload) => Promise<void>;
-  onAddWithStatus: (
-    payload: AddAnimePayload,
-    status: AnimeStatus,
-  ) => Promise<void>;
   onSetMyStatus: (animeId: string, status: AnimeStatus) => void;
   onSetEpisodesWatched: (animeId: string, episodesWatched: number) => void;
 };
@@ -390,7 +386,6 @@ export function MalDiscover({
   animeList,
   currentUser,
   onAdd,
-  onAddWithStatus,
   onSetMyStatus,
   onSetEpisodesWatched,
 }: MalDiscoverProps) {
@@ -410,6 +405,7 @@ export function MalDiscover({
   const [genreFilter, setGenreFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const loadSeqRef = useRef(0);
+  const fetchKeyRef = useRef<string | null>(null);
   const sectionRef = useRef<HTMLElement>(null);
 
   const apiResults = useMemo(() => {
@@ -551,9 +547,15 @@ export function MalDiscover({
 
     const activeView = view;
     const activePickMode = pickMode;
+    const fetchKey = `${activeView}:${activePickMode}:${debouncedQuery}`;
+    const hasCachedResults =
+      fetchKeyRef.current === fetchKey && resultState.items.length > 0;
+    fetchKeyRef.current = fetchKey;
     const seq = ++loadSeqRef.current;
-    setResultState({ view: activeView, items: [] });
-    setIsLoading(true);
+    if (!hasCachedResults) {
+      setResultState({ view: activeView, items: [] });
+      setIsLoading(true);
+    }
     if (activeView !== "pick" || activePickMode !== "lucky") {
       setLuckyPick(null);
     }
@@ -683,7 +685,7 @@ export function MalDiscover({
     catalogIsLoading && (viewUsesCatalog(view) || showLucky);
   const listIsLoading = viewUsesCatalog(view)
     ? (catalog.items.length === 0 && catalogIsLoading) || pageAwaitingData
-    : isLoading && !showLucky;
+    : isLoading && resultState.items.length === 0 && !showLucky;
   const showListPagination =
     viewUsesCatalog(view) &&
     listPagination != null &&
@@ -699,18 +701,6 @@ export function MalDiscover({
     setAddingId(item.malId || item.anilistId || null);
     try {
       await onAdd(addPayloadFromDiscoverItem(item));
-    } finally {
-      setAddingId(null);
-    }
-  }
-
-  async function handleAddWithStatus(
-    item: DiscoverItem,
-    status: AnimeStatus,
-  ) {
-    setAddingId(item.malId || item.anilistId || null);
-    try {
-      await onAddWithStatus(addPayloadFromDiscoverItem(item), status);
     } finally {
       setAddingId(null);
     }
@@ -737,8 +727,6 @@ export function MalDiscover({
         alreadyAdded={Boolean(inList ?? result.watchlistId)}
         isAdding={addingId === (result.malId || result.anilistId)}
         onAdd={() => void handleAdd(result)}
-        onAddWithStatus={(status) => void handleAddWithStatus(result, status)}
-        allowQuickStatus={view === "all" || view === "search"}
         onSetMyStatus={onSetMyStatus}
         onSetEpisodesWatched={onSetEpisodesWatched}
       />
@@ -1016,7 +1004,7 @@ export function MalDiscover({
           No anime found for this filter.
         </p>
       ) : (
-        <div className="flex flex-col gap-8">
+        <div className="flex flex-col gap-4">
           {filteredResults.map((result) => renderDiscoverCard(result))}
           {showListPagination && listPagination && (
             <BrowsePagination

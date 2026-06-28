@@ -42,7 +42,7 @@ export function AnimeList({
   }
 
   return (
-    <div className="grid gap-4">
+    <div className="flex flex-col gap-4">
       {animeList.map((anime) => (
         <AnimeCard
           key={anime.id}

@@ -20,6 +20,8 @@ export const EPISODE_PROGRESS_STATUSES: AnimeStatus[] = [
   "dropped",
   "paused",
   "rewatching",
+  "considering",
+  "planning",
 ];
 
 export function statusShowsEpisodeProgress(status: AnimeStatus): boolean {
@@ -164,12 +166,12 @@ export function setMemberStatus(
       updatedAt: new Date().toISOString(),
     };
     if (statusShowsEpisodeProgress(status)) {
-      const previous = statuses[memberName]?.episodesWatched;
+      const previous = statuses[memberName];
       const resolved =
         episodesWatched != null
           ? episodesWatched
-          : previous != null
-            ? previous
+          : previous?.episodesWatched != null
+            ? previous.episodesWatched
             : undefined;
       if (resolved != null && resolved >= 0) {
         entry.episodesWatched = resolved;
