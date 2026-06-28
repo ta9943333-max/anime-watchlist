@@ -1,18 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, List, LogOut, Sparkles, Trophy, Tv } from "lucide-react";
+import { AlertCircle, Compass, List, LogOut, Sparkles, Trophy, Tv } from "lucide-react";
 import { AnimeForm } from "@/components/AnimeForm";
 import { AnimeList } from "@/components/AnimeList";
 import { FilterTabs } from "@/components/FilterTabs";
 import { FolderSection } from "@/components/FolderSection";
+import { GenreFilter } from "@/components/GenreFilter";
 import { Leaderboard } from "@/components/Leaderboard";
+import { MalDiscover } from "@/components/MalDiscover";
 import { MemberProfileModal } from "@/components/MemberProfileModal";
 import { SearchBar } from "@/components/SearchBar";
 import { SortTabs } from "@/components/SortTabs";
 import { UserSelector } from "@/components/UserSelector";
 import {
-  addAnime,
+  addOrMergeAnime,
   deleteAnime,
   enrichMissingMalMetadata,
   fetchAnimeList,
@@ -69,6 +71,7 @@ export function WatchlistApp() {
   const [animeList, setAnimeList] = useState<AnimeEntry[]>([]);
   const [openFolderId, setOpenFolderId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterOption>("all");
+  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
   const [sort, setSort] = useState<SortOption>("newest");
   const [search, setSearch] = useState("");
   const [viewTab, setViewTab] = useState<ViewTab>("list");
@@ -220,8 +223,16 @@ export function WatchlistApp() {
 
   async function handleAddAnime(payload: AddAnimePayload) {
     try {
-      const entry = await addAnime({ ...payload, folderId: null });
-      setAnimeList((prev) => [entry, ...prev]);
+      const { entry, merged } = await addOrMergeAnime(payload, animeList);
+      setAnimeList((prev) => {
+        if (merged) {
+          return prev.map((item) => (item.id === entry.id ? entry : item));
+        }
+        if (prev.some((item) => item.id === entry.id)) {
+          return prev;
+        }
+        return [entry, ...prev];
+      });
       setError(null);
     } catch (err) {
       setError(
@@ -232,8 +243,19 @@ export function WatchlistApp() {
 
   async function handleAddAnimeToFolder(payload: AddAnimePayload, folderId: string) {
     try {
-      const entry = await addAnime({ ...payload, folderId });
-      setAnimeList((prev) => [entry, ...prev]);
+      const { entry, merged } = await addOrMergeAnime(
+        { ...payload, folderId },
+        animeList,
+      );
+      setAnimeList((prev) => {
+        if (merged) {
+          return prev.map((item) => (item.id === entry.id ? entry : item));
+        }
+        if (prev.some((item) => item.id === entry.id)) {
+          return prev;
+        }
+        return [entry, ...prev];
+      });
       setError(null);
     } catch (err) {
       setError(
@@ -432,8 +454,9 @@ export function WatchlistApp() {
       filter,
       search,
       sort,
+      genre: selectedGenre,
     }),
-    [currentUser, filter, search, sort],
+    [currentUser, filter, search, sort, selectedGenre],
   );
 
   const openFolderAnime = useMemo(() => {
@@ -568,6 +591,18 @@ export function WatchlistApp() {
           </button>
           <button
             type="button"
+            onClick={() => setViewTab("discover")}
+            className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
+              viewTab === "discover"
+                ? "border-violet-500/50 bg-violet-600/20 text-violet-200"
+                : "border-slate-800 bg-slate-900/50 text-slate-400 hover:border-slate-700 hover:text-white"
+            }`}
+          >
+            <Compass className="h-4 w-4" />
+            Discover
+          </button>
+          <button
+            type="button"
             onClick={() => setViewTab("leaderboard")}
             className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
               viewTab === "leaderboard"
@@ -595,6 +630,14 @@ export function WatchlistApp() {
               onOpenProfile={setProfileName}
             />
           )
+        ) : viewTab === "discover" ? (
+          isLoading ? (
+            <div className="flex justify-center py-16">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-violet-500 border-t-transparent" />
+            </div>
+          ) : (
+            <MalDiscover animeList={animeList} onAdd={handleAddAnime} />
+          )
         ) : (
           <>
         {error && (
@@ -610,11 +653,19 @@ export function WatchlistApp() {
         <section className="mb-8 space-y-4">
           <SearchBar value={search} onChange={setSearch} />
           <FilterTabs active={filter} onChange={setFilter} />
+          <GenreFilter
+            animeList={animeList}
+            selectedGenre={selectedGenre}
+            onChange={setSelectedGenre}
+          />
           <SortTabs active={sort} onChange={setSort} />
-          {filter !== "all" && (
+          {(filter !== "all" || selectedGenre) && (
             <p className="text-xs text-slate-500">
-              Gefiltert nach deinem Status — die Reihenfolge bleibt gleich, nur
-              die Ansicht wird eingeschränkt.
+              Gefiltert
+              {filter !== "all" && " nach Status"}
+              {filter !== "all" && selectedGenre && " und"}
+              {selectedGenre && ` nach Genre „${selectedGenre}"`}
+              .
             </p>
           )}
         </section>

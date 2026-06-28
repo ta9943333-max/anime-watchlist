@@ -1,19 +1,20 @@
 import { NextResponse } from "next/server";
 import { mapJikanAnime, type JikanAnime } from "@/lib/mal/map-anime";
 
+const VALID_FILTERS = new Set(["now", "upcoming"]);
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const query = searchParams.get("q")?.trim();
+  const filter = searchParams.get("filter") ?? "now";
 
-  if (!query || query.length < 2) {
-    return NextResponse.json({ results: [] });
+  if (!VALID_FILTERS.has(filter)) {
+    return NextResponse.json({ error: "Invalid filter" }, { status: 400 });
   }
 
   try {
-    const response = await fetch(
-      `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=8`,
-      { next: { revalidate: 86400 } },
-    );
+    const response = await fetch(`https://api.jikan.moe/v4/seasons/${filter}`, {
+      next: { revalidate: 3600 },
+    });
 
     if (!response.ok) {
       return NextResponse.json(
@@ -28,7 +29,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ results });
   } catch {
     return NextResponse.json(
-      { error: "Failed to fetch from MyAnimeList" },
+      { error: "Failed to fetch season anime from MyAnimeList" },
       { status: 500 },
     );
   }

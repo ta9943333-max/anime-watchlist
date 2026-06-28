@@ -5,7 +5,21 @@ import {
   STATUS_OPTIONS,
   type AnimeStatus,
 } from "@/lib/statuses";
-import { getAverageRating, type AnimeEntry, type Member } from "@/lib/types";
+import {
+  getAverageRating,
+  getDisplayTitle,
+  type AnimeEntry,
+  type LeaderboardPeriod,
+  type Member,
+} from "@/lib/types";
+
+export type PeriodStats = {
+  completedCount: number;
+  episodesWatched: number;
+  totalMinutes: number;
+  totalHours: number;
+  titles: string[];
+};
 
 export type MemberLeaderboardStats = {
   name: string;
@@ -17,11 +31,7 @@ export type MemberLeaderboardStats = {
   averageRating: number;
   ratedCount: number;
   topGenres: { genre: string; count: number }[];
-  thisMonth: {
-    completedCount: number;
-    titles: string[];
-    totalMinutes: number;
-  };
+  byPeriod: Record<LeaderboardPeriod, PeriodStats>;
 };
 
 export type AnimeRatingStats = {
@@ -36,14 +46,55 @@ function getFinishedWeight(status: ReturnType<typeof getMemberStatus>): number {
   return status === "rewatching" ? 1.5 : status === "completed" ? 1 : 0;
 }
 
-function isInCurrentMonth(isoDate: string | null): boolean {
+function getPeriodStart(period: LeaderboardPeriod, now = new Date()): Date | null {
+  if (period === "all") return null;
+
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  switch (period) {
+    case "today":
+      return startOfToday;
+    case "week": {
+      const start = new Date(startOfToday);
+      const day = start.getDay();
+      const diff = day === 0 ? 6 : day - 1;
+      start.setDate(start.getDate() - diff);
+      return start;
+    }
+    case "month":
+      return new Date(now.getFullYear(), now.getMonth(), 1);
+    case "year":
+      return new Date(now.getFullYear(), 0, 1);
+    default:
+      return null;
+  }
+}
+
+export function isInLeaderboardPeriod(
+  isoDate: string | null,
+  period: LeaderboardPeriod,
+  now = new Date(),
+): boolean {
+  if (period === "all") return true;
   if (!isoDate) return false;
+
   const date = new Date(isoDate);
-  const now = new Date();
-  return (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth()
-  );
+  if (Number.isNaN(date.getTime()) || date.getFullYear() <= 1970) {
+    return false;
+  }
+
+  const start = getPeriodStart(period, now);
+  return start ? date >= start : false;
+}
+
+function emptyPeriodStats(): PeriodStats {
+  return {
+    completedCount: 0,
+    episodesWatched: 0,
+    totalMinutes: 0,
+    totalHours: 0,
+    titles: [],
+  };
 }
 
 function computeMemberStats(
@@ -56,9 +107,21 @@ function computeMemberStats(
   let ratingSum = 0;
   let ratedCount = 0;
   const genreCounts = new Map<string, number>();
-  const monthTitles: string[] = [];
-  let monthMinutes = 0;
-  let monthCompleted = 0;
+  const byPeriod: Record<LeaderboardPeriod, PeriodStats> = {
+    today: emptyPeriodStats(),
+    week: emptyPeriodStats(),
+    month: emptyPeriodStats(),
+    year: emptyPeriodStats(),
+    all: emptyPeriodStats(),
+  };
+
+  const periods: LeaderboardPeriod[] = [
+    "today",
+    "week",
+    "month",
+    "year",
+    "all",
+  ];
 
   for (const anime of animeList) {
     const rating = anime.ratings[memberName];
@@ -71,22 +134,37 @@ function computeMemberStats(
     if (!FINISHED_STATUSES.includes(status)) continue;
 
     const weight = getFinishedWeight(status);
-    completedCount += weight;
-    episodesWatched += (anime.episodes ?? 0) * weight;
-
     const minutes = anime.totalDurationMin ?? 0;
-    totalMinutes += minutes * weight;
+    const episodes = (anime.episodes ?? 0) * weight;
+    const weightedMinutes = minutes * weight;
+    const displayTitle = getDisplayTitle(anime);
+    const updatedAt = getMemberStatusUpdatedAt(anime.memberStatuses, memberName);
+
+    completedCount += weight;
+    episodesWatched += episodes;
+    totalMinutes += weightedMinutes;
 
     for (const genre of anime.genres) {
       genreCounts.set(genre, (genreCounts.get(genre) ?? 0) + weight);
     }
 
-    const updatedAt = getMemberStatusUpdatedAt(anime.memberStatuses, memberName);
-    if (isInCurrentMonth(updatedAt)) {
-      monthCompleted += weight;
-      monthTitles.push(anime.title);
-      monthMinutes += minutes * weight;
+    for (const period of periods) {
+      if (!isInLeaderboardPeriod(updatedAt, period)) continue;
+
+      const bucket = byPeriod[period];
+      bucket.completedCount += weight;
+      bucket.episodesWatched += episodes;
+      bucket.totalMinutes += weightedMinutes;
+      bucket.titles.push(displayTitle);
     }
+  }
+
+  for (const period of periods) {
+    const bucket = byPeriod[period];
+    bucket.completedCount = Math.round(bucket.completedCount * 10) / 10;
+    bucket.episodesWatched = Math.round(bucket.episodesWatched);
+    bucket.totalMinutes = Math.round(bucket.totalMinutes);
+    bucket.totalHours = Math.round((bucket.totalMinutes / 60) * 10) / 10;
   }
 
   const topGenres = [...genreCounts.entries()]
@@ -101,15 +179,38 @@ function computeMemberStats(
     totalMinutes: Math.round(totalMinutes),
     totalHours: Math.round((totalMinutes / 60) * 10) / 10,
     daysWatched: Math.round((totalMinutes / 60 / 24) * 10) / 10,
-    averageRating: ratedCount > 0 ? Math.round((ratingSum / ratedCount) * 10) / 10 : 0,
+    averageRating:
+      ratedCount > 0 ? Math.round((ratingSum / ratedCount) * 10) / 10 : 0,
     ratedCount,
     topGenres,
-    thisMonth: {
-      completedCount: Math.round(monthCompleted * 10) / 10,
-      titles: monthTitles,
-      totalMinutes: Math.round(monthMinutes),
-    },
+    byPeriod,
   };
+}
+
+export function buildLeaderboardForPeriod(
+  members: Member[],
+  animeList: AnimeEntry[],
+  period: LeaderboardPeriod,
+): MemberLeaderboardStats[] {
+  return members
+    .map((member) => computeMemberStats(member.name, animeList))
+    .sort(
+      (a, b) =>
+        b.byPeriod[period].completedCount - a.byPeriod[period].completedCount,
+    );
+}
+
+export function buildHoursRankingForPeriod(
+  members: Member[],
+  animeList: AnimeEntry[],
+  period: LeaderboardPeriod,
+): MemberLeaderboardStats[] {
+  return members
+    .map((member) => computeMemberStats(member.name, animeList))
+    .sort(
+      (a, b) =>
+        b.byPeriod[period].totalMinutes - a.byPeriod[period].totalMinutes,
+    );
 }
 
 export function buildAnimeRatingRanking(
@@ -120,7 +221,7 @@ export function buildAnimeRatingRanking(
       const { average, count } = getAverageRating(anime.ratings);
       return {
         id: anime.id,
-        title: anime.title,
+        title: getDisplayTitle(anime),
         average,
         count,
         genres: anime.genres,
@@ -134,9 +235,7 @@ export function buildLeaderboard(
   members: Member[],
   animeList: AnimeEntry[],
 ): MemberLeaderboardStats[] {
-  return members
-    .map((member) => computeMemberStats(member.name, animeList))
-    .sort((a, b) => b.completedCount - a.completedCount);
+  return buildLeaderboardForPeriod(members, animeList, "all");
 }
 
 export type MemberProfileGroup = {
@@ -166,7 +265,7 @@ export function buildMemberProfile(
     const list = grouped.get(status) ?? [];
     list.push({
       id: anime.id,
-      title: anime.title,
+      title: getDisplayTitle(anime),
       rating: anime.ratings[name] ?? 0,
     });
     grouped.set(status, list);
@@ -214,3 +313,11 @@ export function getAllGenres(animeList: AnimeEntry[]): string[] {
   }
   return [...genres].sort();
 }
+
+export const LEADERBOARD_PERIOD_LABELS: Record<LeaderboardPeriod, string> = {
+  today: "Today",
+  week: "Week",
+  month: "Month",
+  year: "Year",
+  all: "All-time",
+};

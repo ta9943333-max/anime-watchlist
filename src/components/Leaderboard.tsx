@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import {
-  Calendar,
   Clock,
   Heart,
   Loader2,
@@ -12,14 +11,17 @@ import {
 } from "lucide-react";
 import {
   buildAnimeRatingRanking,
+  buildHoursRankingForPeriod,
   buildLeaderboard,
+  buildLeaderboardForPeriod,
   getAllGenres,
   getTopGenreLeader,
+  LEADERBOARD_PERIOD_LABELS,
   type MemberLeaderboardStats,
 } from "@/lib/stats/leaderboard";
-import type { AnimeEntry, Member } from "@/lib/types";
+import type { AnimeEntry, LeaderboardPeriod, Member } from "@/lib/types";
 
-type LeaderboardTab = "rankings" | "hours" | "rated" | "genres" | "month";
+type LeaderboardTab = "rankings" | "hours" | "rated" | "genres";
 
 type LeaderboardProps = {
   members: Member[];
@@ -29,6 +31,14 @@ type LeaderboardProps = {
   onSyncMal: () => void;
   onOpenProfile: (name: string) => void;
 };
+
+const PERIODS: LeaderboardPeriod[] = [
+  "today",
+  "week",
+  "month",
+  "year",
+  "all",
+];
 
 const POPULAR_GENRES = [
   "Romance",
@@ -104,20 +114,21 @@ export function Leaderboard({
   onOpenProfile,
 }: LeaderboardProps) {
   const [tab, setTab] = useState<LeaderboardTab>("rankings");
+  const [period, setPeriod] = useState<LeaderboardPeriod>("month");
 
-  const stats = useMemo(
+  const allTimeStats = useMemo(
     () => buildLeaderboard(members, animeList),
     [members, animeList],
   );
 
-  const hoursRanking = useMemo(
-    () => [...stats].sort((a, b) => b.totalMinutes - a.totalMinutes),
-    [stats],
+  const periodRanking = useMemo(
+    () => buildLeaderboardForPeriod(members, animeList, period),
+    [members, animeList, period],
   );
 
-  const monthRanking = useMemo(
-    () => [...stats].sort((a, b) => b.thisMonth.completedCount - a.thisMonth.completedCount),
-    [stats],
+  const hoursRanking = useMemo(
+    () => buildHoursRankingForPeriod(members, animeList, period),
+    [members, animeList, period],
   );
 
   const animeRanking = useMemo(
@@ -136,8 +147,9 @@ export function Leaderboard({
     { id: "hours", label: "Hours", icon: Clock },
     { id: "rated", label: "Top Anime", icon: Star },
     { id: "genres", label: "Genres", icon: Heart },
-    { id: "month", label: "This Month", icon: Calendar },
   ];
+
+  const showPeriodSelector = tab === "rankings" || tab === "hours";
 
   return (
     <section className="space-y-6">
@@ -145,7 +157,8 @@ export function Leaderboard({
         <div>
           <h2 className="text-xl font-bold text-white">Leaderboard</h2>
           <p className="mt-1 text-sm text-slate-400">
-            Rankings based on Completed / Rewatching status · MAL runtime data
+            Who watched the most — filter by today, week, month, year or
+            all-time
           </p>
         </div>
 
@@ -184,43 +197,92 @@ export function Leaderboard({
         ))}
       </div>
 
+      {showPeriodSelector && (
+        <div className="flex flex-wrap gap-2">
+          {PERIODS.map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setPeriod(value)}
+              className={`rounded-xl px-3.5 py-2 text-sm font-medium transition ${
+                period === value
+                  ? "bg-amber-600 text-white shadow-lg shadow-amber-900/30"
+                  : "bg-slate-800/60 text-slate-300 hover:bg-slate-700/80 hover:text-white"
+              }`}
+            >
+              {LEADERBOARD_PERIOD_LABELS[value]}
+            </button>
+          ))}
+        </div>
+      )}
+
       {tab === "rankings" && (
         <div className="space-y-2">
-          {stats.length === 0 ? (
+          {periodRanking.length === 0 ? (
             <p className="py-8 text-center text-slate-500">No members yet.</p>
           ) : (
-            stats.map((member, index) => (
-              <StatRow
-                key={member.name}
-                rank={index + 1}
-                member={member}
-                primary={`${member.completedCount} Serien`}
-                secondary={`${member.episodesWatched} Folgen · ${member.totalHours}h · ${member.daysWatched} Tage`}
-                highlight={member.name === currentUser}
-                onClick={() => onOpenProfile(member.name)}
-              />
-            ))
+            periodRanking.map((member, index) => {
+              const bucket = member.byPeriod[period];
+              return (
+                <div key={member.name} className="space-y-2">
+                  <StatRow
+                    rank={index + 1}
+                    member={member}
+                    primary={`${bucket.completedCount} series`}
+                    secondary={`${bucket.episodesWatched} eps · ${bucket.totalHours}h · ${LEADERBOARD_PERIOD_LABELS[period]}`}
+                    highlight={member.name === currentUser}
+                    onClick={() => onOpenProfile(member.name)}
+                  />
+                  {period !== "all" && bucket.titles.length > 0 && (
+                    <ul className="ml-11 space-y-1 border-l border-slate-800 pl-3">
+                      {bucket.titles.map((title) => (
+                        <li
+                          key={`${member.name}-${title}`}
+                          className="truncate text-xs text-slate-500"
+                        >
+                          {title}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })
+          )}
+
+          {periodRanking.every(
+            (member) => member.byPeriod[period].completedCount === 0,
+          ) && (
+            <p className="py-8 text-center text-slate-500">
+              Nobody completed anything in this period yet.
+            </p>
           )}
         </div>
       )}
 
       {tab === "hours" && (
         <div className="space-y-2">
-          {hoursRanking.map((member, index) => (
-            <StatRow
-              key={member.name}
-              rank={index + 1}
-              member={member}
-              primary={`${member.totalHours} Stunden`}
-              secondary={`${member.daysWatched} Tage · ${member.episodesWatched} Folgen`}
-              highlight={member.name === currentUser}
-              onClick={() => onOpenProfile(member.name)}
-            />
-          ))}
-          {hoursRanking.every((m) => m.totalMinutes === 0) && (
+          {hoursRanking.map((member, index) => {
+            const bucket = member.byPeriod[period];
+            return (
+              <StatRow
+                key={member.name}
+                rank={index + 1}
+                member={member}
+                primary={`${bucket.totalHours} hours`}
+                secondary={`${bucket.episodesWatched} eps · ${LEADERBOARD_PERIOD_LABELS[period]}`}
+                highlight={member.name === currentUser}
+                onClick={() => onOpenProfile(member.name)}
+              />
+            );
+          })}
+
+          {hoursRanking.every(
+            (member) => member.byPeriod[period].totalMinutes === 0,
+          ) && (
             <p className="rounded-xl border border-amber-500/30 bg-amber-950/20 px-4 py-3 text-sm text-amber-200">
-              No runtime data yet. Use &quot;Sync MAL data&quot; to fetch episode
-              lengths from MyAnimeList.
+              No watch time in this period yet. Use &quot;Sync MAL data&quot; if
+              episode lengths are missing.
             </p>
           )}
         </div>
@@ -229,12 +291,12 @@ export function Leaderboard({
       {tab === "rated" && (
         <div className="space-y-2">
           <p className="text-sm text-slate-400">
-            Beliebteste Anime nach Durchschnittsbewertung der Gruppe (1–10).
+            Top anime by group average rating (1–10).
           </p>
 
           {animeRanking.length === 0 ? (
             <p className="py-8 text-center text-slate-500">
-              Noch keine Bewertungen. Bewerte Anime auf den Karten mit 1–10.
+              No ratings yet. Rate anime on the cards with 1–10.
             </p>
           ) : (
             animeRanking.map((entry, index) => (
@@ -248,7 +310,7 @@ export function Leaderboard({
                     {entry.title}
                   </p>
                   <p className="truncate text-xs text-slate-500">
-                    {entry.count} {entry.count === 1 ? "Stimme" : "Stimmen"}
+                    {entry.count} {entry.count === 1 ? "vote" : "votes"}
                     {entry.genres.length > 0 &&
                       ` · ${entry.genres.slice(0, 3).join(", ")}`}
                   </p>
@@ -267,7 +329,7 @@ export function Leaderboard({
         <div className="space-y-6">
           <div className="grid gap-3 sm:grid-cols-2">
             {POPULAR_GENRES.map((genre) => {
-              const leader = getTopGenreLeader(stats, genre);
+              const leader = getTopGenreLeader(allTimeStats, genre);
               const count =
                 leader?.topGenres.find(
                   (entry) => entry.genre.toLowerCase() === genre.toLowerCase(),
@@ -315,57 +377,6 @@ export function Leaderboard({
               </div>
             </div>
           )}
-        </div>
-      )}
-
-      {tab === "month" && (
-        <div className="space-y-4">
-          <p className="text-sm text-slate-400">
-            Based on when someone set Completed or Rewatching this month.
-          </p>
-
-          <div className="space-y-2">
-            {monthRanking.map((member, index) => (
-              <div
-                key={member.name}
-                className={`rounded-xl border px-4 py-3 ${
-                  member.name === currentUser
-                    ? "border-violet-500/40 bg-violet-600/10"
-                    : "border-slate-800/80 bg-slate-900/50"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <RankBadge rank={index + 1} />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-white">{member.name}</p>
-                    <p className="text-sm text-violet-300">
-                      {member.thisMonth.completedCount} completed ·{" "}
-                      {Math.round(member.thisMonth.totalMinutes / 60 * 10) / 10}h
-                    </p>
-                  </div>
-                </div>
-
-                {member.thisMonth.titles.length > 0 && (
-                  <ul className="mt-3 space-y-1 border-t border-slate-800/80 pt-3">
-                    {member.thisMonth.titles.map((title) => (
-                      <li
-                        key={`${member.name}-${title}`}
-                        className="truncate text-sm text-slate-400"
-                      >
-                        {title}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ))}
-
-            {monthRanking.every((m) => m.thisMonth.completedCount === 0) && (
-              <p className="py-8 text-center text-slate-500">
-                Nobody completed anything this month yet.
-              </p>
-            )}
-          </div>
         </div>
       )}
     </section>

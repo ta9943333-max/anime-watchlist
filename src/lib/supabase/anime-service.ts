@@ -1,4 +1,5 @@
 import { searchMalAnime } from "@/lib/mal/jikan";
+import { mergeGenres, prettifySeriesKey } from "@/lib/mal/titles";
 import {
   FINISHED_STATUSES,
   getMemberStatus,
@@ -41,6 +42,9 @@ function mapRow(row: AnimeRow): AnimeEntry {
   return {
     id: row.id,
     title: row.title,
+    titleEnglish: row.title_english ?? null,
+    seriesKey: row.series_key ?? null,
+    malStatus: row.mal_status ?? null,
     memberStatuses: parseMemberStatuses(row),
     folderId: row.folder_id ?? null,
     createdAt: row.created_at,
@@ -77,6 +81,9 @@ export async function addAnime(payload: AddAnimePayload): Promise<AnimeEntry> {
     .from("anime")
     .insert({
       title: payload.title,
+      title_english: payload.titleEnglish ?? null,
+      series_key: payload.seriesKey ?? null,
+      mal_status: payload.malStatus ?? null,
       watched_by: [],
       member_statuses: {},
       folder_id: payload.folderId ?? null,
@@ -95,6 +102,70 @@ export async function addAnime(payload: AddAnimePayload): Promise<AnimeEntry> {
   }
 
   return mapRow(data);
+}
+
+export async function mergeSeasonIntoExisting(
+  existing: AnimeEntry,
+  payload: AddAnimePayload,
+): Promise<AnimeEntry> {
+  const mergedEpisodes =
+    (existing.episodes ?? 0) + (payload.episodes ?? 0) || null;
+  const mergedDuration =
+    (existing.totalDurationMin ?? 0) + (payload.totalDurationMin ?? 0) || null;
+  const mergedGenres = mergeGenres(existing.genres, payload.genres ?? []);
+  const mergedTitle = existing.seriesKey
+    ? prettifySeriesKey(existing.seriesKey)
+    : existing.title;
+
+  const { data, error } = await supabase
+    .from("anime")
+    .update({
+      title: mergedTitle,
+      episodes: mergedEpisodes,
+      total_duration_min: mergedDuration,
+      genres: mergedGenres,
+      mal_status: payload.malStatus ?? existing.malStatus,
+    })
+    .eq("id", existing.id)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return mapRow(data);
+}
+
+export async function addOrMergeAnime(
+  payload: AddAnimePayload,
+  existingList: AnimeEntry[],
+): Promise<{ entry: AnimeEntry; merged: boolean }> {
+  if (payload.malId) {
+    const duplicateMal = existingList.find(
+      (anime) => anime.malId === payload.malId,
+    );
+    if (duplicateMal) {
+      return { entry: duplicateMal, merged: false };
+    }
+  }
+
+  if (payload.seriesKey && payload.seriesKey.length > 2) {
+    const sameSeries = existingList.find(
+      (anime) =>
+        anime.seriesKey === payload.seriesKey &&
+        anime.malId !== payload.malId &&
+        anime.folderId === (payload.folderId ?? null),
+    );
+
+    if (sameSeries) {
+      const merged = await mergeSeasonIntoExisting(sameSeries, payload);
+      return { entry: merged, merged: true };
+    }
+  }
+
+  const entry = await addAnime(payload);
+  return { entry, merged: false };
 }
 
 export async function updateMemberStatuses(
@@ -118,6 +189,10 @@ export async function updateAnimeMalMetadata(
   animeId: string,
   metadata: {
     malId: number;
+    title?: string;
+    titleEnglish?: string | null;
+    seriesKey?: string | null;
+    malStatus?: string | null;
     episodes: number | null;
     episodeDurationMin: number | null;
     totalDurationMin: number | null;
@@ -128,6 +203,10 @@ export async function updateAnimeMalMetadata(
     .from("anime")
     .update({
       mal_id: metadata.malId,
+      title: metadata.title,
+      title_english: metadata.titleEnglish ?? null,
+      series_key: metadata.seriesKey ?? null,
+      mal_status: metadata.malStatus ?? null,
       episodes: metadata.episodes,
       episode_duration_min: metadata.episodeDurationMin,
       total_duration_min: metadata.totalDurationMin,
@@ -159,6 +238,10 @@ export async function enrichAnimeFromMal(anime: AnimeEntry): Promise<AnimeEntry>
 
   return updateAnimeMalMetadata(anime.id, {
     malId: match.malId,
+    title: match.title,
+    titleEnglish: match.titleEnglish,
+    seriesKey: match.seriesKey,
+    malStatus: match.malStatus,
     episodes: match.episodes,
     episodeDurationMin: match.episodeDurationMin,
     totalDurationMin: match.totalDurationMin,

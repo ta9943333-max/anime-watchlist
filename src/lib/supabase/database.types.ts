@@ -21,9 +21,12 @@ export type Database = {
           genres: string[];
           id: string;
           mal_id: number | null;
+          mal_status: string | null;
           member_statuses: Json;
           ratings: Json;
+          series_key: string | null;
           title: string;
+          title_english: string | null;
           total_duration_min: number | null;
           watched_by: string[];
         };
@@ -35,9 +38,12 @@ export type Database = {
           genres?: string[];
           id?: string;
           mal_id?: number | null;
+          mal_status?: string | null;
           member_statuses?: Json;
           ratings?: Json;
+          series_key?: string | null;
           title: string;
+          title_english?: string | null;
           total_duration_min?: number | null;
           watched_by?: string[];
         };
@@ -49,9 +55,12 @@ export type Database = {
           genres?: string[];
           id?: string;
           mal_id?: number | null;
+          mal_status?: string | null;
           member_statuses?: Json;
           ratings?: Json;
+          series_key?: string | null;
           title?: string;
+          title_english?: string | null;
           total_duration_min?: number | null;
           watched_by?: string[];
         };

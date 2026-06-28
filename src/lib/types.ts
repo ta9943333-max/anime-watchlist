@@ -8,7 +8,9 @@ export type FilterOption = "all" | "no-status" | AnimeStatus;
 
 export type SortOption = "newest" | "title-asc" | "title-desc";
 
-export type ViewTab = "list" | "leaderboard";
+export type ViewTab = "list" | "discover" | "leaderboard";
+
+export type LeaderboardPeriod = "today" | "week" | "month" | "year" | "all";
 
 export type Member = {
   id: string;
@@ -25,6 +27,9 @@ export type Folder = {
 export type AnimeEntry = {
   id: string;
   title: string;
+  titleEnglish: string | null;
+  seriesKey: string | null;
+  malStatus: string | null;
   memberStatuses: MemberStatuses;
   folderId: string | null;
   createdAt: string;
@@ -35,6 +40,10 @@ export type AnimeEntry = {
   genres: string[];
   ratings: Record<string, number>;
 };
+
+export function getDisplayTitle(anime: AnimeEntry): string {
+  return anime.titleEnglish?.trim() || anime.title;
+}
 
 export function getAverageRating(ratings: Record<string, number>): {
   average: number;
@@ -53,6 +62,9 @@ export function getAverageRating(ratings: Record<string, number>): {
 
 export type AddAnimePayload = {
   title: string;
+  titleEnglish?: string | null;
+  seriesKey?: string | null;
+  malStatus?: string | null;
   folderId?: string | null;
   malId?: number | null;
   episodes?: number | null;
@@ -76,14 +88,14 @@ export function sortAnimeList(
   switch (sort) {
     case "title-asc":
       return copy.sort((a, b) => {
-        const byTitle = a.title.localeCompare(b.title, "de", {
+        const byTitle = getDisplayTitle(a).localeCompare(getDisplayTitle(b), "de", {
           sensitivity: "base",
         });
         return byTitle !== 0 ? byTitle : a.id.localeCompare(b.id);
       });
     case "title-desc":
       return copy.sort((a, b) => {
-        const byTitle = b.title.localeCompare(a.title, "de", {
+        const byTitle = getDisplayTitle(b).localeCompare(getDisplayTitle(a), "de", {
           sensitivity: "base",
         });
         return byTitle !== 0 ? byTitle : a.id.localeCompare(b.id);
@@ -129,6 +141,7 @@ export function applyAnimeFilters(
     sort: SortOption;
     scope: "all" | "folder" | "general";
     folderId?: string | null;
+    genre?: string | null;
   },
 ): AnimeEntry[] {
   let result = list;
@@ -154,11 +167,25 @@ export function applyAnimeFilters(
     }
   });
 
+  if (options.genre) {
+    const genreQuery = options.genre.toLowerCase();
+    result = result.filter((anime) =>
+      anime.genres.some((genre) => genre.toLowerCase() === genreQuery),
+    );
+  }
+
   if (options.search.trim()) {
     const query = options.search.trim().toLowerCase();
-    result = result.filter((anime) =>
-      anime.title.toLowerCase().includes(query),
-    );
+    result = result.filter((anime) => {
+      const haystack = [
+        anime.title,
+        anime.titleEnglish ?? "",
+        anime.seriesKey ?? "",
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(query);
+    });
   }
 
   return sortAnimeList(result, options.sort);

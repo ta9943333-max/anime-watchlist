@@ -94,6 +94,9 @@ export function AnimeForm({
   function handleSelectResult(result: MalSearchResult) {
     submitPayload({
       title: result.title,
+      titleEnglish: result.titleEnglish,
+      seriesKey: result.seriesKey,
+      malStatus: result.malStatus,
       folderId,
       malId: result.malId,
       episodes: result.episodes,

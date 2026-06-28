@@ -1,11 +1,15 @@
 export type MalSearchResult = {
   malId: number;
   title: string;
+  titleEnglish: string | null;
+  seriesKey: string;
   episodes: number | null;
   episodeDurationMin: number | null;
   totalDurationMin: number | null;
   genres: string[];
+  malStatus: string | null;
   imageUrl: string | null;
+  airedFrom: string | null;
 };
 
 export function parseMalDuration(
@@ -51,6 +55,19 @@ export async function searchMalAnime(query: string): Promise<MalSearchResult[]> 
 
   if (!response.ok) {
     throw new Error("MyAnimeList search failed");
+  }
+
+  const data = (await response.json()) as { results: MalSearchResult[] };
+  return data.results;
+}
+
+export async function fetchMalSeason(
+  filter: "now" | "upcoming",
+): Promise<MalSearchResult[]> {
+  const response = await fetch(`/api/mal/season?filter=${filter}`);
+
+  if (!response.ok) {
+    throw new Error("MyAnimeList season fetch failed");
   }
 
   const data = (await response.json()) as { results: MalSearchResult[] };

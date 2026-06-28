@@ -13,6 +13,7 @@ import {
 } from "@/lib/statuses";
 import {
   getAverageRating,
+  getDisplayTitle,
   sortMembersByName,
   type AnimeEntry,
   type Folder,
@@ -51,6 +52,7 @@ export function AnimeCard({
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const displayTitle = getDisplayTitle(anime);
   const sortedMembers = sortMembersByName(members);
   const memberNames = sortedMembers.map((m) => m.name);
   const finishedCount = countFinishedMembers(anime.memberStatuses, memberNames);
@@ -82,7 +84,7 @@ export function AnimeCard({
   async function handleDelete() {
     if (
       !window.confirm(
-        `"${anime.title}" wirklich löschen? Das kann nicht rückgängig gemacht werden.`,
+        `"${displayTitle}" wirklich löschen? Das kann nicht rückgängig gemacht werden.`,
       )
     ) {
       return;
@@ -141,9 +143,22 @@ export function AnimeCard({
           </form>
         ) : (
           <>
-            <h3 className="min-w-0 flex-1 text-lg font-semibold text-white">
-              {anime.title}
-            </h3>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-lg font-semibold text-white">{displayTitle}</h3>
+              {anime.episodes && (
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {anime.episodes} episodes
+                  {anime.totalDurationMin
+                    ? ` · ${Math.round((anime.totalDurationMin / 60) * 10) / 10}h`
+                    : ""}
+                </p>
+              )}
+              {anime.malStatus === "Not yet aired" && (
+                <span className="mt-1 inline-flex rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-300">
+                  Upcoming
+                </span>
+              )}
+            </div>
             <div className="flex shrink-0 items-center gap-1">
               {myStatus !== "none" && <StatusBadge status={myStatus} />}
               <button
