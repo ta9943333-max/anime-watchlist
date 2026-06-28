@@ -25,7 +25,7 @@ export type AnimeLiveChartData = AnimeReleaseFields & {
 };
 
 export const ANIME_CARD_GRID =
-  "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4";
+  "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
 
 type AnimeLiveChartCardProps = {
   anime: AnimeLiveChartData;

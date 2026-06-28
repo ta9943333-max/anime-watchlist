@@ -639,8 +639,8 @@ export function WatchlistApp() {
       </div>
 
       <div
-        className={`relative mx-auto px-4 py-8 sm:px-6 sm:py-12 ${
-          viewTab === "discover" ? "max-w-5xl" : "max-w-3xl"
+        className={`relative mx-auto w-full px-4 py-8 sm:px-6 lg:px-8 sm:py-12 ${
+          viewTab === "leaderboard" ? "max-w-5xl" : "max-w-[1760px]"
         }`}
       >
         <header className="mb-8">
