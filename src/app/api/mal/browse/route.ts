@@ -15,7 +15,7 @@ type JikanPagination = {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const page = Math.max(1, Number(searchParams.get("page") ?? 1));
-  const limit = Math.min(Math.max(Number(searchParams.get("limit") ?? 25), 1), 25);
+  const limit = Math.min(Math.max(Number(searchParams.get("limit") ?? 25), 1), 50);
   const orderBy = searchParams.get("order_by") ?? "popularity";
   const sort = searchParams.get("sort") === "asc" ? "asc" : "desc";
 

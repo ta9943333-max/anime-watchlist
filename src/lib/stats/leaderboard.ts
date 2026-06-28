@@ -2,6 +2,8 @@ import {
   FINISHED_STATUSES,
   getMemberStatus,
   getMemberStatusUpdatedAt,
+  getMemberProgressEpisodes,
+  getMemberProgressMinutes,
   STATUS_OPTIONS,
   type AnimeStatus,
 } from "@/lib/statuses";
@@ -131,31 +133,66 @@ function computeMemberStats(
     }
 
     const status = getMemberStatus(anime.memberStatuses, memberName);
-    if (!FINISHED_STATUSES.includes(status)) continue;
+    const progressEpisodes = getMemberProgressEpisodes(
+      anime.memberStatuses,
+      memberName,
+      anime.episodes,
+    );
+    const progressMinutes = getMemberProgressMinutes(
+      anime.memberStatuses,
+      memberName,
+      anime.episodes,
+      anime.episodeDurationMin,
+      anime.totalDurationMin,
+    );
 
-    const weight = getFinishedWeight(status);
-    const minutes = anime.totalDurationMin ?? 0;
-    const episodes = (anime.episodes ?? 0) * weight;
-    const weightedMinutes = minutes * weight;
+    if (progressEpisodes <= 0 && progressMinutes <= 0) continue;
+
     const displayTitle = getDisplayTitle(anime);
     const updatedAt = getMemberStatusUpdatedAt(anime.memberStatuses, memberName);
 
-    completedCount += weight;
-    episodesWatched += episodes;
-    totalMinutes += weightedMinutes;
+    if (FINISHED_STATUSES.includes(status)) {
+      const weight = getFinishedWeight(status);
+      const minutes = anime.totalDurationMin ?? progressMinutes;
+      const episodes = (anime.episodes ?? progressEpisodes) * weight;
+      const weightedMinutes = minutes * weight;
+
+      completedCount += weight;
+      episodesWatched += episodes;
+      totalMinutes += weightedMinutes;
+
+      for (const genre of anime.genres) {
+        genreCounts.set(genre, (genreCounts.get(genre) ?? 0) + weight);
+      }
+
+      for (const period of periods) {
+        if (!isInLeaderboardPeriod(updatedAt, period)) continue;
+
+        const bucket = byPeriod[period];
+        bucket.completedCount += weight;
+        bucket.episodesWatched += episodes;
+        bucket.totalMinutes += weightedMinutes;
+        bucket.titles.push(displayTitle);
+      }
+      continue;
+    }
+
+    episodesWatched += progressEpisodes;
+    totalMinutes += progressMinutes;
 
     for (const genre of anime.genres) {
-      genreCounts.set(genre, (genreCounts.get(genre) ?? 0) + weight);
+      genreCounts.set(genre, (genreCounts.get(genre) ?? 0) + 1);
     }
 
     for (const period of periods) {
       if (!isInLeaderboardPeriod(updatedAt, period)) continue;
 
       const bucket = byPeriod[period];
-      bucket.completedCount += weight;
-      bucket.episodesWatched += episodes;
-      bucket.totalMinutes += weightedMinutes;
-      bucket.titles.push(displayTitle);
+      bucket.episodesWatched += progressEpisodes;
+      bucket.totalMinutes += progressMinutes;
+      if (!bucket.titles.includes(displayTitle)) {
+        bucket.titles.push(displayTitle);
+      }
     }
   }
 

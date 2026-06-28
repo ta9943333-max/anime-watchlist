@@ -12,7 +12,19 @@ export type AnimeStatus =
 export type MemberStatusEntry = {
   status: AnimeStatus;
   updatedAt: string;
+  episodesWatched?: number;
 };
+
+export const EPISODE_PROGRESS_STATUSES: AnimeStatus[] = [
+  "watching",
+  "dropped",
+  "paused",
+  "rewatching",
+];
+
+export function statusShowsEpisodeProgress(status: AnimeStatus): boolean {
+  return EPISODE_PROGRESS_STATUSES.includes(status);
+}
 
 export type MemberStatuses = Record<string, MemberStatusEntry>;
 
@@ -90,12 +102,23 @@ export function normalizeMemberStatuses(raw: unknown): MemberStatuses {
     }
 
     if (value && typeof value === "object" && !Array.isArray(value)) {
-      const entry = value as { status?: string; updatedAt?: string };
+      const entry = value as {
+        status?: string;
+        updatedAt?: string;
+        episodesWatched?: number;
+      };
       if (entry.status && isValidStatus(entry.status) && entry.status !== "none") {
-        result[name] = {
+        const normalized: MemberStatusEntry = {
           status: entry.status,
           updatedAt: entry.updatedAt ?? new Date().toISOString(),
         };
+        if (
+          typeof entry.episodesWatched === "number" &&
+          entry.episodesWatched >= 0
+        ) {
+          normalized.episodesWatched = entry.episodesWatched;
+        }
+        result[name] = normalized;
       }
     }
   }
@@ -117,23 +140,109 @@ export function getMemberStatusUpdatedAt(
   return statuses[memberName]?.updatedAt ?? null;
 }
 
+export function getMemberEpisodesWatched(
+  statuses: MemberStatuses,
+  memberName: string,
+): number | null {
+  const value = statuses[memberName]?.episodesWatched;
+  return typeof value === "number" && value >= 0 ? value : null;
+}
+
 export function setMemberStatus(
   statuses: MemberStatuses,
   memberName: string,
   status: AnimeStatus,
+  episodesWatched?: number | null,
 ): MemberStatuses {
   const next = { ...statuses };
 
   if (status === "none") {
     delete next[memberName];
   } else {
-    next[memberName] = {
+    const entry: MemberStatusEntry = {
       status,
       updatedAt: new Date().toISOString(),
     };
+    if (statusShowsEpisodeProgress(status)) {
+      const previous = statuses[memberName]?.episodesWatched;
+      const resolved =
+        episodesWatched != null
+          ? episodesWatched
+          : previous != null
+            ? previous
+            : undefined;
+      if (resolved != null && resolved >= 0) {
+        entry.episodesWatched = resolved;
+      }
+    }
+    next[memberName] = entry;
   }
 
   return next;
+}
+
+export function setMemberEpisodesWatched(
+  statuses: MemberStatuses,
+  memberName: string,
+  episodesWatched: number,
+): MemberStatuses {
+  const current = statuses[memberName];
+  if (!current || !statusShowsEpisodeProgress(current.status)) {
+    return statuses;
+  }
+
+  return {
+    ...statuses,
+    [memberName]: {
+      ...current,
+      episodesWatched: Math.max(0, episodesWatched),
+      updatedAt: new Date().toISOString(),
+    },
+  };
+}
+
+export function getMemberProgressEpisodes(
+  statuses: MemberStatuses,
+  memberName: string,
+  totalEpisodes: number | null,
+): number {
+  const status = getMemberStatus(statuses, memberName);
+  const total = totalEpisodes ?? 0;
+
+  if (FINISHED_STATUSES.includes(status)) {
+    return total;
+  }
+
+  const progress = getMemberEpisodesWatched(statuses, memberName);
+  if (statusShowsEpisodeProgress(status) && progress != null) {
+    return total > 0 ? Math.min(progress, total) : progress;
+  }
+
+  return 0;
+}
+
+export function getMemberProgressMinutes(
+  statuses: MemberStatuses,
+  memberName: string,
+  totalEpisodes: number | null,
+  episodeDurationMin: number | null,
+  totalDurationMin: number | null,
+): number {
+  const watchedEps = getMemberProgressEpisodes(
+    statuses,
+    memberName,
+    totalEpisodes,
+  );
+  if (watchedEps <= 0) return 0;
+
+  const perEpisode =
+    episodeDurationMin ??
+    (totalDurationMin && totalEpisodes
+      ? totalDurationMin / totalEpisodes
+      : null) ??
+    0;
+
+  return Math.round(watchedEps * perEpisode);
 }
 
 export function countFinishedMembers(

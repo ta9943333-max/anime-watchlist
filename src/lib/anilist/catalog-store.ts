@@ -1,3 +1,4 @@
+import { rankSearchResults } from "@/lib/mal/search-rank";
 import type { DiscoverItem } from "@/lib/mal/jikan";
 
 export type CatalogPageInfo = {
@@ -17,7 +18,7 @@ export type AnilistCatalogState = {
   error: string | null;
 };
 
-const PAGE_DELAY_MS = 650;
+const PAGE_DELAY_MS = 500;
 
 let state: AnilistCatalogState = {
   items: [],
@@ -140,4 +141,14 @@ export function pickRandomCatalogItem(): DiscoverItem | null {
   if (state.items.length === 0) return null;
   const index = Math.floor(Math.random() * state.items.length);
   return state.items[index] ?? null;
+}
+
+export function searchCatalogItems(
+  query: string,
+  limit = 50,
+): DiscoverItem[] {
+  const trimmed = query.trim();
+  if (trimmed.length < 2 || state.items.length === 0) return [];
+
+  return rankSearchResults(trimmed, state.items).slice(0, limit);
 }

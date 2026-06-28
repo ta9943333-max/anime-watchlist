@@ -1,5 +1,5 @@
 import { getDisplayTitle, type AnimeEntry } from "@/lib/types";
-import { getMemberStatus } from "@/lib/statuses";
+import { getMemberStatus, getMemberEpisodesWatched } from "@/lib/statuses";
 import type { DiscoverItem } from "@/lib/mal/jikan";
 
 export function animeEntryToDiscoverItem(
@@ -28,6 +28,10 @@ export function animeEntryToDiscoverItem(
     score: null,
     watchlistId: anime.id,
     myStatus: getMemberStatus(anime.memberStatuses, currentUser),
+    myEpisodesWatched: getMemberEpisodesWatched(
+      anime.memberStatuses,
+      currentUser,
+    ),
   };
 }
 

@@ -43,8 +43,11 @@ import {
 } from "@/lib/storage";
 import {
   getMemberStatus,
+  getMemberProgressEpisodes,
+  getMemberProgressMinutes,
   isFinishedStatus,
   setMemberStatus,
+  setMemberEpisodesWatched,
   type AnimeStatus,
 } from "@/lib/statuses";
 import {
@@ -450,6 +453,44 @@ export function WatchlistApp() {
     }
   }
 
+  async function handleSetEpisodesWatched(
+    animeId: string,
+    episodesWatched: number,
+  ) {
+    if (!currentUser) return;
+
+    const anime = animeList.find((entry) => entry.id === animeId);
+    if (!anime) return;
+
+    const nextStatuses = setMemberEpisodesWatched(
+      anime.memberStatuses,
+      currentUser,
+      episodesWatched,
+    );
+
+    setAnimeList((prev) =>
+      prev.map((entry) =>
+        entry.id === animeId
+          ? { ...entry, memberStatuses: nextStatuses }
+          : entry,
+      ),
+    );
+
+    try {
+      await updateMemberStatuses(animeId, nextStatuses);
+      setError(null);
+    } catch (err) {
+      setAnimeList((prev) =>
+        prev.map((entry) => (entry.id === animeId ? anime : entry)),
+      );
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Episoden-Fortschritt konnte nicht gespeichert werden.",
+      );
+    }
+  }
+
   async function handleSetMyStatus(animeId: string, status: AnimeStatus) {
     if (!currentUser) return;
 
@@ -527,11 +568,28 @@ export function WatchlistApp() {
     let minutes = 0;
 
     for (const anime of animeList) {
-      if (isFinishedStatus(getMemberStatus(anime.memberStatuses, currentUser))) {
+      const status = getMemberStatus(anime.memberStatuses, currentUser);
+      const watchedEps = getMemberProgressEpisodes(
+        anime.memberStatuses,
+        currentUser,
+        anime.episodes,
+      );
+      const watchedMins = getMemberProgressMinutes(
+        anime.memberStatuses,
+        currentUser,
+        anime.episodes,
+        anime.episodeDurationMin,
+        anime.totalDurationMin,
+      );
+
+      if (watchedEps <= 0 && watchedMins <= 0) continue;
+
+      if (isFinishedStatus(status)) {
         series += 1;
-        episodes += anime.episodes ?? 0;
-        minutes += anime.totalDurationMin ?? 0;
       }
+
+      episodes += watchedEps;
+      minutes += watchedMins;
     }
 
     return {
@@ -685,6 +743,7 @@ export function WatchlistApp() {
               onAdd={handleAddAnime}
               onAddWithStatus={handleAddWithStatus}
               onSetMyStatus={handleSetMyStatus}
+              onSetEpisodesWatched={handleSetEpisodesWatched}
             />
           )
         ) : (
@@ -745,6 +804,7 @@ export function WatchlistApp() {
               onDeleteFolder={handleDeleteFolder}
               onAddAnimeToFolder={handleAddAnimeToFolder}
               onSetMyStatus={handleSetMyStatus}
+              onSetEpisodesWatched={handleSetEpisodesWatched}
               onMoveToFolder={handleMoveToFolder}
               onRenameAnime={handleRenameAnime}
               onDeleteAnime={handleDeleteAnime}
@@ -771,6 +831,7 @@ export function WatchlistApp() {
                   folders={folders}
                   currentUser={currentUser}
                   onSetMyStatus={handleSetMyStatus}
+                  onSetEpisodesWatched={handleSetEpisodesWatched}
                   onMoveToFolder={handleMoveToFolder}
                   onRenameAnime={handleRenameAnime}
                   onDeleteAnime={handleDeleteAnime}

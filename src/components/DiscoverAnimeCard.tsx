@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Plus, Sparkles, Star } from "lucide-react";
 import { releaseFieldsFromAnime } from "@/components/AnimeReleaseBadge";
+import { EpisodeProgressField } from "@/components/EpisodeProgressField";
 import { StatusBadge } from "@/components/StatusBadge";
 import {
   formatAnimeRelease,
@@ -21,6 +22,7 @@ type DiscoverAnimeCardProps = {
   onAddWithStatus?: (status: AnimeStatus) => void;
   allowQuickStatus?: boolean;
   onSetMyStatus?: (animeId: string, status: AnimeStatus) => void;
+  onSetEpisodesWatched?: (animeId: string, episodesWatched: number) => void;
 };
 
 const QUICK_STATUS_OPTIONS: AnimeStatus[] = [
@@ -46,6 +48,7 @@ export function DiscoverAnimeCard({
   onAddWithStatus,
   allowQuickStatus = false,
   onSetMyStatus,
+  onSetEpisodesWatched,
 }: DiscoverAnimeCardProps) {
   const releaseInfo = useMemo(() => releaseFieldsFromAnime(anime), [anime]);
   const releaseLabel = formatAnimeRelease(releaseInfo);
@@ -56,6 +59,7 @@ export function DiscoverAnimeCard({
 
   const [now, setNow] = useState(() => Date.now());
   const myStatus = anime.myStatus ?? "none";
+  const myEpisodesWatched = anime.myEpisodesWatched ?? 0;
 
   useEffect(() => {
     if (!countdownTarget) return;
@@ -179,6 +183,17 @@ export function DiscoverAnimeCard({
                     </option>
                   ))}
                 </select>
+                <EpisodeProgressField
+                  status={myStatus}
+                  totalEpisodes={anime.episodes}
+                  episodesWatched={myEpisodesWatched}
+                  compact
+                  onEpisodesWatchedChange={(value) => {
+                    if (anime.watchlistId && onSetEpisodesWatched) {
+                      onSetEpisodesWatched(anime.watchlistId, value);
+                    }
+                  }}
+                />
               </div>
             )}
 

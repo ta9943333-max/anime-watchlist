@@ -26,6 +26,7 @@ import {
 } from "@/lib/mal/discover-utils";
 import {
   pickRandomCatalogItem,
+  searchCatalogItems,
 } from "@/lib/anilist/catalog-store";
 import { useAnilistCatalog } from "@/lib/anilist/use-anilist-catalog";
 import {
@@ -35,6 +36,7 @@ import {
   searchMalAnime,
   type DiscoverItem,
 } from "@/lib/mal/jikan";
+import { rankSearchResults } from "@/lib/mal/search-rank";
 import {
   getCountdownTarget,
   isCurrentlyAiring,
@@ -44,6 +46,7 @@ import { getDisplayTitle, type AnimeEntry } from "@/lib/types";
 import {
   STATUS_OPTIONS,
   getMemberStatus,
+  getMemberEpisodesWatched,
   type AnimeStatus,
 } from "@/lib/statuses";
 import type { AddAnimePayload } from "@/lib/types";
@@ -57,6 +60,7 @@ type MalDiscoverProps = {
     status: AnimeStatus,
   ) => Promise<void>;
   onSetMyStatus: (animeId: string, status: AnimeStatus) => void;
+  onSetEpisodesWatched: (animeId: string, episodesWatched: number) => void;
 };
 
 type DiscoverView = "pick" | "search" | "all" | "airing" | "upcoming";
@@ -358,6 +362,9 @@ function attachWatchlistMeta(
       myStatus: inList
         ? getMemberStatus(inList.memberStatuses, currentUser)
         : (item.myStatus ?? "none"),
+      myEpisodesWatched: inList
+        ? getMemberEpisodesWatched(inList.memberStatuses, currentUser)
+        : item.myEpisodesWatched,
       title: inList ? getDisplayTitle(inList) : item.title,
     };
   });
@@ -385,6 +392,7 @@ export function MalDiscover({
   onAdd,
   onAddWithStatus,
   onSetMyStatus,
+  onSetEpisodesWatched,
 }: MalDiscoverProps) {
   const catalog = useAnilistCatalog();
   const [view, setView] = useState<DiscoverView>("pick");
@@ -404,8 +412,10 @@ export function MalDiscover({
   const loadSeqRef = useRef(0);
   const sectionRef = useRef<HTMLElement>(null);
 
-  const apiResults =
-    resultState.view === view ? resultState.items : [];
+  const apiResults = useMemo(() => {
+    if (resultState.view !== view) return [];
+    return attachWatchlistMeta(resultState.items, animeList, currentUser);
+  }, [resultState, view, animeList, currentUser]);
 
   const watchlistByMalId = useMemo(() => {
     const map = new Map<number, AnimeEntry>();
@@ -553,23 +563,26 @@ export function MalDiscover({
         if (activeView === "search") {
           if (debouncedQuery.length >= 2) {
             const found = await searchMalAnime(debouncedQuery);
-            let items = dedupeByMalId(found);
+            const fromCatalog = searchCatalogItems(debouncedQuery, 50);
+            let items = dedupeByMalId(
+              rankSearchResults(debouncedQuery, [...fromCatalog, ...found]),
+            ).slice(0, 50);
             items = await enrichItems(items);
             if (seq !== loadSeqRef.current) return;
             setResultState({
               view: activeView,
-              items: attachWatchlistMeta(items, animeList, currentUser),
+              items,
             });
             return;
           }
 
-          const popular = await fetchMalTop("popular", 25);
+          const popular = await fetchMalTop("popular", 50);
           let items = dedupeByMalId(popular);
           items = await enrichItems(items);
           if (seq !== loadSeqRef.current) return;
           setResultState({
             view: activeView,
-            items: attachWatchlistMeta(items, animeList, currentUser),
+            items,
           });
           return;
         }
@@ -588,7 +601,7 @@ export function MalDiscover({
           if (seq !== loadSeqRef.current) return;
           setResultState({
             view: activeView,
-            items: attachWatchlistMeta(items, animeList, currentUser),
+            items,
           });
           return;
         }
@@ -618,7 +631,7 @@ export function MalDiscover({
         if (seq !== loadSeqRef.current) return;
         setResultState({
           view: activeView,
-          items: attachWatchlistMeta(items, animeList, currentUser),
+          items,
         });
       } catch {
         if (seq !== loadSeqRef.current) return;
@@ -631,7 +644,7 @@ export function MalDiscover({
     }
 
     void load();
-  }, [view, pickMode, debouncedQuery, animeList, currentUser]);
+  }, [view, pickMode, debouncedQuery]);
 
   useEffect(() => {
     if (!viewUsesCatalog(view)) return;
@@ -711,6 +724,9 @@ export function MalDiscover({
       myStatus: inList
         ? getMemberStatus(inList.memberStatuses, currentUser)
         : (result.myStatus ?? "none"),
+      myEpisodesWatched: inList
+        ? getMemberEpisodesWatched(inList.memberStatuses, currentUser)
+        : result.myEpisodesWatched,
       title: inList ? getDisplayTitle(inList) : result.title,
     };
 
@@ -724,6 +740,7 @@ export function MalDiscover({
         onAddWithStatus={(status) => void handleAddWithStatus(result, status)}
         allowQuickStatus={view === "all" || view === "search"}
         onSetMyStatus={onSetMyStatus}
+        onSetEpisodesWatched={onSetEpisodesWatched}
       />
     );
   }

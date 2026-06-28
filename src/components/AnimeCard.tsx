@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { FolderInput, Pencil, Star, Trash2, X, Check } from "lucide-react";
+import { EpisodeProgressField } from "@/components/EpisodeProgressField";
 import { ProgressBar } from "@/components/ProgressBar";
 import {
   AnimeReleaseBadge,
@@ -11,6 +12,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import {
   countFinishedMembers,
   getMemberStatus,
+  getMemberEpisodesWatched,
   isFinishedStatus,
   STATUS_OPTIONS,
   type AnimeStatus,
@@ -30,6 +32,7 @@ type AnimeCardProps = {
   folders: Folder[];
   currentUser: string;
   onSetMyStatus: (animeId: string, status: AnimeStatus) => void;
+  onSetEpisodesWatched: (animeId: string, episodesWatched: number) => void;
   onMoveToFolder: (animeId: string, folderId: string | null) => void;
   onRenameAnime: (animeId: string, title: string) => Promise<void>;
   onDeleteAnime: (animeId: string) => Promise<void>;
@@ -45,6 +48,7 @@ export function AnimeCard({
   folders,
   currentUser,
   onSetMyStatus,
+  onSetEpisodesWatched,
   onMoveToFolder,
   onRenameAnime,
   onDeleteAnime,
@@ -61,6 +65,8 @@ export function AnimeCard({
   const memberNames = sortedMembers.map((m) => m.name);
   const finishedCount = countFinishedMembers(anime.memberStatuses, memberNames);
   const myStatus = getMemberStatus(anime.memberStatuses, currentUser);
+  const myEpisodesWatched =
+    getMemberEpisodesWatched(anime.memberStatuses, currentUser) ?? 0;
   const otherMembers = sortedMembers.filter((m) => m.name !== currentUser);
   const myRating = anime.ratings[currentUser] ?? 0;
   const { average, count } = getAverageRating(anime.ratings);
@@ -229,6 +235,14 @@ export function AnimeCard({
               </option>
             ))}
           </select>
+          <EpisodeProgressField
+            status={myStatus}
+            totalEpisodes={anime.episodes}
+            episodesWatched={myEpisodesWatched}
+            onEpisodesWatchedChange={(value) =>
+              onSetEpisodesWatched(anime.id, value)
+            }
+          />
         </div>
 
         <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
