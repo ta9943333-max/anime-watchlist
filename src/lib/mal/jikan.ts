@@ -10,6 +10,11 @@ export type MalSearchResult = {
   malStatus: string | null;
   imageUrl: string | null;
   airedFrom: string | null;
+  airedTo: string | null;
+  broadcastDay: string | null;
+  broadcastTime: string | null;
+  malSeason: string | null;
+  malYear: number | null;
 };
 
 export function parseMalDuration(

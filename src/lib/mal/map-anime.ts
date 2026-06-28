@@ -3,6 +3,12 @@ import { extractSeriesKey, pickDisplayTitle } from "@/lib/mal/titles";
 
 export type JikanGenre = { name: string };
 
+export type JikanBroadcast = {
+  day?: string | null;
+  time?: string | null;
+  timezone?: string | null;
+};
+
 export type JikanAnime = {
   mal_id: number;
   title: string;
@@ -12,6 +18,9 @@ export type JikanAnime = {
   genres: JikanGenre[];
   status?: string | null;
   aired?: { from?: string | null; to?: string | null };
+  broadcast?: JikanBroadcast | null;
+  season?: string | null;
+  year?: number | null;
   images?: { jpg?: { image_url?: string } };
 };
 
@@ -27,6 +36,11 @@ export type MappedMalAnime = {
   malStatus: string | null;
   imageUrl: string | null;
   airedFrom: string | null;
+  airedTo: string | null;
+  broadcastDay: string | null;
+  broadcastTime: string | null;
+  malSeason: string | null;
+  malYear: number | null;
 };
 
 export function mapJikanAnime(anime: JikanAnime): MappedMalAnime {
@@ -49,5 +63,10 @@ export function mapJikanAnime(anime: JikanAnime): MappedMalAnime {
     malStatus: anime.status ?? null,
     imageUrl: anime.images?.jpg?.image_url ?? null,
     airedFrom: anime.aired?.from ?? null,
+    airedTo: anime.aired?.to ?? null,
+    broadcastDay: anime.broadcast?.day ?? null,
+    broadcastTime: anime.broadcast?.time ?? null,
+    malSeason: anime.season ?? null,
+    malYear: anime.year ?? null,
   };
 }

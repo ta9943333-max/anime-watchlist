@@ -39,6 +39,12 @@ export type AnimeEntry = {
   totalDurationMin: number | null;
   genres: string[];
   ratings: Record<string, number>;
+  airedFrom: string | null;
+  airedTo: string | null;
+  broadcastDay: string | null;
+  broadcastTime: string | null;
+  malSeason: string | null;
+  malYear: number | null;
 };
 
 export function getDisplayTitle(anime: AnimeEntry): string {
@@ -71,6 +77,12 @@ export type AddAnimePayload = {
   episodeDurationMin?: number | null;
   totalDurationMin?: number | null;
   genres?: string[];
+  airedFrom?: string | null;
+  airedTo?: string | null;
+  broadcastDay?: string | null;
+  broadcastTime?: string | null;
+  malSeason?: string | null;
+  malYear?: number | null;
 };
 
 export function sortMembersByName(members: Member[]): Member[] {

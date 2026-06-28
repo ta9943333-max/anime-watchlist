@@ -38,6 +38,17 @@ function parseRatings(row: AnimeRow): Record<string, number> {
   return result;
 }
 
+function releasePayload(payload: AddAnimePayload) {
+  return {
+    aired_from: payload.airedFrom ?? null,
+    aired_to: payload.airedTo ?? null,
+    broadcast_day: payload.broadcastDay ?? null,
+    broadcast_time: payload.broadcastTime ?? null,
+    mal_season: payload.malSeason ?? null,
+    mal_year: payload.malYear ?? null,
+  };
+}
+
 function mapRow(row: AnimeRow): AnimeEntry {
   return {
     id: row.id,
@@ -54,6 +65,12 @@ function mapRow(row: AnimeRow): AnimeEntry {
     totalDurationMin: row.total_duration_min ?? null,
     genres: row.genres ?? [],
     ratings: parseRatings(row),
+    airedFrom: row.aired_from ?? null,
+    airedTo: row.aired_to ?? null,
+    broadcastDay: row.broadcast_day ?? null,
+    broadcastTime: row.broadcast_time ?? null,
+    malSeason: row.mal_season ?? null,
+    malYear: row.mal_year ?? null,
   };
 }
 
@@ -93,6 +110,7 @@ export async function addAnime(payload: AddAnimePayload): Promise<AnimeEntry> {
       total_duration_min: payload.totalDurationMin ?? null,
       genres: payload.genres ?? [],
       ratings: {},
+      ...releasePayload(payload),
     })
     .select("*")
     .single();
@@ -125,6 +143,12 @@ export async function mergeSeasonIntoExisting(
       total_duration_min: mergedDuration,
       genres: mergedGenres,
       mal_status: payload.malStatus ?? existing.malStatus,
+      aired_from: existing.airedFrom ?? payload.airedFrom ?? null,
+      aired_to: existing.airedTo ?? payload.airedTo ?? null,
+      broadcast_day: existing.broadcastDay ?? payload.broadcastDay ?? null,
+      broadcast_time: existing.broadcastTime ?? payload.broadcastTime ?? null,
+      mal_season: existing.malSeason ?? payload.malSeason ?? null,
+      mal_year: existing.malYear ?? payload.malYear ?? null,
     })
     .eq("id", existing.id)
     .select("*")
@@ -197,6 +221,12 @@ export async function updateAnimeMalMetadata(
     episodeDurationMin: number | null;
     totalDurationMin: number | null;
     genres: string[];
+    airedFrom?: string | null;
+    airedTo?: string | null;
+    broadcastDay?: string | null;
+    broadcastTime?: string | null;
+    malSeason?: string | null;
+    malYear?: number | null;
   },
 ): Promise<AnimeEntry> {
   const { data, error } = await supabase
@@ -211,6 +241,12 @@ export async function updateAnimeMalMetadata(
       episode_duration_min: metadata.episodeDurationMin,
       total_duration_min: metadata.totalDurationMin,
       genres: metadata.genres,
+      aired_from: metadata.airedFrom ?? null,
+      aired_to: metadata.airedTo ?? null,
+      broadcast_day: metadata.broadcastDay ?? null,
+      broadcast_time: metadata.broadcastTime ?? null,
+      mal_season: metadata.malSeason ?? null,
+      mal_year: metadata.malYear ?? null,
     })
     .eq("id", animeId)
     .select("*")
@@ -224,7 +260,8 @@ export async function updateAnimeMalMetadata(
 }
 
 export async function enrichAnimeFromMal(anime: AnimeEntry): Promise<AnimeEntry> {
-  if (anime.malId && anime.totalDurationMin) {
+  const needsMetadata = !anime.totalDurationMin || !anime.airedFrom;
+  if (anime.malId && !needsMetadata) {
     return anime;
   }
 
@@ -246,13 +283,21 @@ export async function enrichAnimeFromMal(anime: AnimeEntry): Promise<AnimeEntry>
     episodeDurationMin: match.episodeDurationMin,
     totalDurationMin: match.totalDurationMin,
     genres: match.genres,
+    airedFrom: match.airedFrom,
+    airedTo: match.airedTo,
+    broadcastDay: match.broadcastDay,
+    broadcastTime: match.broadcastTime,
+    malSeason: match.malSeason,
+    malYear: match.malYear,
   });
 }
 
 export async function enrichMissingMalMetadata(
   animeList: AnimeEntry[],
 ): Promise<AnimeEntry[]> {
-  const missing = animeList.filter((anime) => !anime.totalDurationMin);
+  const missing = animeList.filter(
+    (anime) => !anime.totalDurationMin || !anime.airedFrom,
+  );
   if (missing.length === 0) {
     return animeList;
   }

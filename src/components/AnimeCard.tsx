@@ -3,6 +3,10 @@
 import { FormEvent, useState } from "react";
 import { FolderInput, Pencil, Star, Trash2, X, Check } from "lucide-react";
 import { ProgressBar } from "@/components/ProgressBar";
+import {
+  AnimeReleaseBadge,
+  releaseFieldsFromAnime,
+} from "@/components/AnimeReleaseBadge";
 import { StatusBadge } from "@/components/StatusBadge";
 import {
   countFinishedMembers,
@@ -153,11 +157,9 @@ export function AnimeCard({
                     : ""}
                 </p>
               )}
-              {anime.malStatus === "Not yet aired" && (
-                <span className="mt-1 inline-flex rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-300">
-                  Upcoming
-                </span>
-              )}
+              <div className="mt-2">
+                <AnimeReleaseBadge info={releaseFieldsFromAnime(anime)} />
+              </div>
             </div>
             <div className="flex shrink-0 items-center gap-1">
               {myStatus !== "none" && <StatusBadge status={myStatus} />}

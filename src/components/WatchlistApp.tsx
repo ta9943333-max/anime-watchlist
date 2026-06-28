@@ -134,7 +134,9 @@ export function WatchlistApp() {
         }
 
         if (!cancelled && !didAutoSyncRef.current) {
-          const missing = list.filter((anime) => !anime.totalDurationMin);
+          const missing = list.filter(
+            (anime) => !anime.totalDurationMin || !anime.airedFrom,
+          );
           if (missing.length > 0) {
             didAutoSyncRef.current = true;
             setIsSyncingMal(true);

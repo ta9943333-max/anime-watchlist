@@ -3,6 +3,7 @@
 import { Loader2, Plus, Search } from "lucide-react";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { searchMalAnime, type MalSearchResult } from "@/lib/mal/jikan";
+import { formatAnimeRelease } from "@/lib/mal/release-date";
 import type { AddAnimePayload } from "@/lib/types";
 
 type AnimeFormProps = {
@@ -103,6 +104,12 @@ export function AnimeForm({
       episodeDurationMin: result.episodeDurationMin,
       totalDurationMin: result.totalDurationMin,
       genres: result.genres,
+      airedFrom: result.airedFrom,
+      airedTo: result.airedTo,
+      broadcastDay: result.broadcastDay,
+      broadcastTime: result.broadcastTime,
+      malSeason: result.malSeason,
+      malYear: result.malYear,
     });
   }
 
@@ -160,6 +167,11 @@ export function AnimeForm({
                     {result.genres.length > 0 &&
                       ` · ${result.genres.slice(0, 3).join(", ")}`}
                   </p>
+                  {formatAnimeRelease(result) && (
+                    <p className="mt-0.5 text-xs text-sky-300">
+                      {formatAnimeRelease(result)}
+                    </p>
+                  )}
                 </div>
               </button>
             </li>

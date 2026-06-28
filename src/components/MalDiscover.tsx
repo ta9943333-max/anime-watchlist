@@ -2,6 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CalendarClock, Loader2, Plus, Sparkles, Tv } from "lucide-react";
+import {
+  AnimeReleaseBadge,
+  releaseFieldsFromAnime,
+} from "@/components/AnimeReleaseBadge";
 import { fetchMalSeason, type MalSearchResult } from "@/lib/mal/jikan";
 import type { AddAnimePayload, AnimeEntry } from "@/lib/types";
 
@@ -98,6 +102,12 @@ export function MalDiscover({ animeList, onAdd }: MalDiscoverProps) {
         episodeDurationMin: result.episodeDurationMin,
         totalDurationMin: result.totalDurationMin,
         genres: result.genres,
+        airedFrom: result.airedFrom,
+        airedTo: result.airedTo,
+        broadcastDay: result.broadcastDay,
+        broadcastTime: result.broadcastTime,
+        malSeason: result.malSeason,
+        malYear: result.malYear,
       });
     } finally {
       setAddingId(null);
@@ -212,8 +222,17 @@ export function MalDiscover({ animeList, onAdd }: MalDiscoverProps) {
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
                     {formatDuration(result)}
+                    {result.episodes && result.episodeDurationMin
+                      ? ` · ${result.episodes} eps × ${result.episodeDurationMin}m`
+                      : ""}
                     {result.malStatus && ` · ${statusLabel(result.malStatus)}`}
                   </p>
+                  <div className="mt-2">
+                    <AnimeReleaseBadge
+                      info={releaseFieldsFromAnime(result)}
+                      compact
+                    />
+                  </div>
                   {result.genres.length > 0 && (
                     <p className="mt-1 line-clamp-1 text-xs text-pink-300/80">
                       {result.genres.slice(0, 4).join(", ")}

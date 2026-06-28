@@ -14,6 +14,10 @@ export type Database = {
     Tables: {
       anime: {
         Row: {
+          aired_from: string | null;
+          aired_to: string | null;
+          broadcast_day: string | null;
+          broadcast_time: string | null;
           created_at: string;
           episode_duration_min: number | null;
           episodes: number | null;
@@ -21,7 +25,9 @@ export type Database = {
           genres: string[];
           id: string;
           mal_id: number | null;
+          mal_season: string | null;
           mal_status: string | null;
+          mal_year: number | null;
           member_statuses: Json;
           ratings: Json;
           series_key: string | null;
@@ -31,6 +37,10 @@ export type Database = {
           watched_by: string[];
         };
         Insert: {
+          aired_from?: string | null;
+          aired_to?: string | null;
+          broadcast_day?: string | null;
+          broadcast_time?: string | null;
           created_at?: string;
           episode_duration_min?: number | null;
           episodes?: number | null;
@@ -38,7 +48,9 @@ export type Database = {
           genres?: string[];
           id?: string;
           mal_id?: number | null;
+          mal_season?: string | null;
           mal_status?: string | null;
+          mal_year?: number | null;
           member_statuses?: Json;
           ratings?: Json;
           series_key?: string | null;
@@ -48,6 +60,10 @@ export type Database = {
           watched_by?: string[];
         };
         Update: {
+          aired_from?: string | null;
+          aired_to?: string | null;
+          broadcast_day?: string | null;
+          broadcast_time?: string | null;
           created_at?: string;
           episode_duration_min?: number | null;
           episodes?: number | null;
@@ -55,7 +71,9 @@ export type Database = {
           genres?: string[];
           id?: string;
           mal_id?: number | null;
+          mal_season?: string | null;
           mal_status?: string | null;
+          mal_year?: number | null;
           member_statuses?: Json;
           ratings?: Json;
           series_key?: string | null;
