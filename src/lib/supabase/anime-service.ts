@@ -1,5 +1,5 @@
-import { searchMalAnime } from "@/lib/mal/jikan";
-import { mergeGenres, prettifySeriesKey } from "@/lib/mal/titles";
+import { searchMalAnime, fetchMalAnimeDetails } from "@/lib/mal/jikan";
+import { mergeGenres, prettifySeriesKey, isLikelySeasonSequel } from "@/lib/mal/titles";
 import {
   FINISHED_STATUSES,
   getMemberStatus,
@@ -186,6 +186,8 @@ export async function addOrMergeAnime(
   }
 
   if (payload.seriesKey && payload.seriesKey.length > 2) {
+    const incomingTitle =
+      payload.titleEnglish?.trim() || payload.title?.trim() || "";
     const sameSeries = existingList.find(
       (anime) =>
         anime.seriesKey === payload.seriesKey &&
@@ -193,7 +195,7 @@ export async function addOrMergeAnime(
         anime.folderId === (payload.folderId ?? null),
     );
 
-    if (sameSeries) {
+    if (sameSeries && isLikelySeasonSequel(incomingTitle)) {
       const merged = await mergeSeasonIntoExisting(sameSeries, payload);
       return { entry: merged, merged: true };
     }
@@ -322,6 +324,68 @@ export async function enrichMissingMalMetadata(
       await new Promise((resolve) => setTimeout(resolve, 400));
     } catch {
       updated.set(anime.id, anime);
+    }
+  }
+
+  return animeList.map((anime) => updated.get(anime.id) ?? anime);
+}
+
+function metadataNeedsReconcile(
+  anime: AnimeEntry,
+  mal: {
+    episodes: number | null;
+    episodeDurationMin: number | null;
+    totalDurationMin: number | null;
+  },
+): boolean {
+  if (!anime.totalDurationMin || !anime.episodeDurationMin) return true;
+  if (mal.episodes != null && anime.episodes !== mal.episodes) return true;
+  if (
+    mal.episodes != null &&
+    anime.episodes != null &&
+    anime.episodes > mal.episodes
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** Refresh episode counts and runtime from MAL (fixes inflated merge totals). */
+export async function reconcileAnimeMetadata(
+  animeList: AnimeEntry[],
+): Promise<AnimeEntry[]> {
+  const withMal = animeList.filter((anime) => anime.malId && anime.malId > 0);
+  if (withMal.length === 0) return animeList;
+
+  const detailsMap = await fetchMalAnimeDetails(withMal.map((a) => a.malId!));
+  const updated = new Map<string, AnimeEntry>();
+
+  for (const anime of withMal) {
+    const mal = detailsMap.get(anime.malId!);
+    if (!mal || !metadataNeedsReconcile(anime, mal)) continue;
+
+    try {
+      const fixed = await updateAnimeMalMetadata(anime.id, {
+        malId: mal.malId,
+        title: mal.title,
+        titleEnglish: mal.titleEnglish,
+        seriesKey: mal.seriesKey,
+        malStatus: mal.malStatus,
+        episodes: mal.episodes,
+        episodeDurationMin: mal.episodeDurationMin,
+        totalDurationMin: mal.totalDurationMin,
+        genres: mergeGenres(anime.genres, mal.genres),
+        airedFrom: mal.airedFrom ?? anime.airedFrom,
+        airedTo: mal.airedTo ?? anime.airedTo,
+        broadcastDay: mal.broadcastDay ?? anime.broadcastDay,
+        broadcastTime: mal.broadcastTime ?? anime.broadcastTime,
+        malSeason: mal.malSeason ?? anime.malSeason,
+        malYear: mal.malYear ?? anime.malYear,
+      });
+      updated.set(anime.id, fixed);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    } catch {
+      // keep existing row
     }
   }
 

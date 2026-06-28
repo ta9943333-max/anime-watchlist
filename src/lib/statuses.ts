@@ -84,6 +84,9 @@ export const STATUS_OPTIONS: {
 
 export const FINISHED_STATUSES: AnimeStatus[] = ["completed", "rewatching"];
 
+/** Fallback when MAL has no runtime data (typical TV episode length). */
+export const DEFAULT_EPISODE_DURATION_MIN = 24;
+
 export function getStatusMeta(status: AnimeStatus) {
   return (
     STATUS_OPTIONS.find((option) => option.value === status) ?? STATUS_OPTIONS[0]
@@ -276,6 +279,7 @@ export function getMemberProgressMinutes(
   episodeDurationMin: number | null,
   totalDurationMin: number | null,
 ): number {
+  const status = getMemberStatus(statuses, memberName);
   const watchedEps = getMemberProgressEpisodes(
     statuses,
     memberName,
@@ -283,12 +287,39 @@ export function getMemberProgressMinutes(
   );
   if (watchedEps <= 0) return 0;
 
-  const perEpisode =
-    episodeDurationMin ??
-    (totalDurationMin && totalEpisodes
-      ? totalDurationMin / totalEpisodes
-      : null) ??
-    0;
+  if (status === "rewatching" && totalDurationMin != null && totalDurationMin > 0) {
+    return Math.round(
+      totalDurationMin * getMemberRewatchCount(statuses, memberName),
+    );
+  }
+
+  if (status === "completed" && totalDurationMin != null && totalDurationMin > 0) {
+    return Math.round(totalDurationMin);
+  }
+
+  if (
+    statusShowsEpisodeProgress(status) &&
+    totalDurationMin != null &&
+    totalDurationMin > 0 &&
+    totalEpisodes != null &&
+    totalEpisodes > 0
+  ) {
+    return Math.round((watchedEps / totalEpisodes) * totalDurationMin);
+  }
+
+  let perEpisode = episodeDurationMin;
+  if (
+    perEpisode == null &&
+    totalDurationMin != null &&
+    totalDurationMin > 0 &&
+    totalEpisodes != null &&
+    totalEpisodes > 0
+  ) {
+    perEpisode = totalDurationMin / totalEpisodes;
+  }
+  if (perEpisode == null || perEpisode <= 0) {
+    perEpisode = DEFAULT_EPISODE_DURATION_MIN;
+  }
 
   return Math.round(watchedEps * perEpisode);
 }

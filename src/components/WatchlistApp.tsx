@@ -26,6 +26,7 @@ import {
   fetchAnimeList,
   moveAnimeToFolder,
   renameAnime,
+  reconcileAnimeMetadata,
   subscribeToAnimeChanges,
   updateMemberStatuses,
   updateRatings,
@@ -105,7 +106,6 @@ export function WatchlistApp() {
   const recapCheckedRef = useRef(false);
   const discoverSyncInFlightRef = useRef<Set<string>>(new Set());
   const [folderSetupNeeded, setFolderSetupNeeded] = useState(false);
-  const didAutoSyncRef = useRef(false);
   const skipRemoteSyncUntilRef = useRef(0);
 
   function markLocalWrite() {
@@ -219,24 +219,18 @@ export function WatchlistApp() {
           setError(null);
         }
 
-        if (!cancelled && !didAutoSyncRef.current) {
-          const missing = list.filter(
-            (anime) => !anime.totalDurationMin || !anime.airedFrom,
-          );
-          if (missing.length > 0) {
-            didAutoSyncRef.current = true;
-            setIsSyncingMal(true);
-            void enrichMissingMalMetadata(list)
-              .then((enriched) => {
-                if (!cancelled) {
-                  setAnimeList((prev) => mergeAnimeLists(prev, enriched));
-                }
-              })
-              .catch(() => {})
-              .finally(() => {
-                if (!cancelled) setIsSyncingMal(false);
-              });
-          }
+        if (!cancelled) {
+          void (async () => {
+            try {
+              let refreshed = await reconcileAnimeMetadata(list);
+              refreshed = await enrichMissingMalMetadata(refreshed);
+              if (!cancelled) {
+                setAnimeList((prev) => mergeAnimeLists(prev, refreshed));
+              }
+            } catch {
+              // Stats still use fallback episode length when MAL sync fails
+            }
+          })();
         }
       } catch (err) {
         if (!cancelled) {
