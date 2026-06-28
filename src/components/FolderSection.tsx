@@ -4,7 +4,8 @@ import { FormEvent, useState } from "react";
 import { ArrowLeft, Folder, FolderPlus, Trash2 } from "lucide-react";
 import { AnimeForm } from "@/components/AnimeForm";
 import { AnimeList } from "@/components/AnimeList";
-import type { AnimeEntry, Folder as FolderType, Member } from "@/lib/types";
+import type { AnimeStatus } from "@/lib/statuses";
+import type { AddAnimePayload, AnimeEntry, Folder as FolderType, Member } from "@/lib/types";
 
 type FolderSectionProps = {
   folders: FolderType[];
@@ -16,9 +17,11 @@ type FolderSectionProps = {
   onOpenFolder: (folderId: string | null) => void;
   onCreateFolder: (name: string) => Promise<void>;
   onDeleteFolder: (folderId: string) => Promise<void>;
-  onAddAnimeToFolder: (title: string, folderId: string) => Promise<void>;
-  onToggleWatch: (animeId: string, memberName: string) => void;
+  onAddAnimeToFolder: (payload: AddAnimePayload, folderId: string) => Promise<void>;
+  onSetMyStatus: (animeId: string, status: AnimeStatus) => void;
   onMoveToFolder: (animeId: string, folderId: string | null) => void;
+  onRenameAnime: (animeId: string, title: string) => Promise<void>;
+  onDeleteAnime: (animeId: string) => Promise<void>;
 };
 
 export function FolderSection({
@@ -32,8 +35,10 @@ export function FolderSection({
   onCreateFolder,
   onDeleteFolder,
   onAddAnimeToFolder,
-  onToggleWatch,
+  onSetMyStatus,
   onMoveToFolder,
+  onRenameAnime,
+  onDeleteAnime,
 }: FolderSectionProps) {
   const [newFolderName, setNewFolderName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
@@ -90,8 +95,9 @@ export function FolderSection({
 
         <div className="mb-5">
           <AnimeForm
-            onAdd={(title) => void onAddAnimeToFolder(title, openFolder.id)}
-            placeholder={`Anime zu „${openFolder.name}" hinzufügen …`}
+            onAdd={(payload) => void onAddAnimeToFolder(payload, openFolder.id)}
+            folderId={openFolder.id}
+            placeholder={`Add anime to „${openFolder.name}" …`}
           />
         </div>
 
@@ -100,8 +106,10 @@ export function FolderSection({
           members={members}
           folders={folders}
           currentUser={currentUser}
-          onToggleWatch={onToggleWatch}
+          onSetMyStatus={onSetMyStatus}
           onMoveToFolder={onMoveToFolder}
+          onRenameAnime={onRenameAnime}
+          onDeleteAnime={onDeleteAnime}
           emptyMessage="Noch keine Anime in diesem Ordner."
         />
       </section>

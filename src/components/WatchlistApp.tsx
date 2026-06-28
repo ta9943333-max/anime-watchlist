@@ -1,20 +1,24 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, LogOut, Sparkles, Tv } from "lucide-react";
+import { AlertCircle, List, LogOut, Sparkles, Trophy, Tv } from "lucide-react";
 import { AnimeForm } from "@/components/AnimeForm";
 import { AnimeList } from "@/components/AnimeList";
 import { FilterTabs } from "@/components/FilterTabs";
 import { FolderSection } from "@/components/FolderSection";
+import { Leaderboard } from "@/components/Leaderboard";
 import { SearchBar } from "@/components/SearchBar";
 import { SortTabs } from "@/components/SortTabs";
 import { UserSelector } from "@/components/UserSelector";
 import {
   addAnime,
+  deleteAnime,
+  enrichMissingMalMetadata,
   fetchAnimeList,
   moveAnimeToFolder,
+  renameAnime,
   subscribeToAnimeChanges,
-  updateWatchedBy,
+  updateMemberStatuses,
 } from "@/lib/supabase/anime-service";
 import {
   createFolder,
@@ -23,6 +27,7 @@ import {
   subscribeToFolderChanges,
 } from "@/lib/supabase/folder-service";
 import {
+  fetchAllowedMemberNames,
   fetchMembers,
   registerMember,
   subscribeToMemberChanges,
@@ -33,15 +38,22 @@ import {
   saveCurrentUser,
 } from "@/lib/storage";
 import {
+  getMemberStatus,
+  isFinishedStatus,
+  setMemberStatus,
+  type AnimeStatus,
+} from "@/lib/statuses";
+import {
   applyAnimeFilters,
-  hasWatchedByMember,
   mergeAnimeLists,
   sortMembersByName,
+  type AddAnimePayload,
   type AnimeEntry,
   type FilterOption,
   type Folder,
   type Member,
   type SortOption,
+  type ViewTab,
 } from "@/lib/types";
 
 function getInitialUser(): string | null {
@@ -57,10 +69,13 @@ export function WatchlistApp() {
   const [filter, setFilter] = useState<FilterOption>("all");
   const [sort, setSort] = useState<SortOption>("newest");
   const [search, setSearch] = useState("");
+  const [viewTab, setViewTab] = useState<ViewTab>("list");
+  const [isSyncingMal, setIsSyncingMal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [allowedNames, setAllowedNames] = useState<string[] | null>(null);
   const [folderSetupNeeded, setFolderSetupNeeded] = useState(false);
 
   useEffect(() => {
@@ -68,9 +83,10 @@ export function WatchlistApp() {
 
     async function loadData() {
       try {
-        const [list, memberList] = await Promise.all([
+        const [list, memberList, allowed] = await Promise.all([
           fetchAnimeList(),
           fetchMembers(),
+          fetchAllowedMemberNames(),
         ]);
 
         let folderList: Folder[] = [];
@@ -84,6 +100,7 @@ export function WatchlistApp() {
         if (!cancelled) {
           setAnimeList((prev) => mergeAnimeLists(prev, list));
           setMembers(memberList);
+          setAllowedNames(allowed);
           setFolders(folderList);
           setError(null);
         }
@@ -147,9 +164,9 @@ export function WatchlistApp() {
     clearCurrentUser();
   }
 
-  async function handleAddAnime(title: string) {
+  async function handleAddAnime(payload: AddAnimePayload) {
     try {
-      const entry = await addAnime(title, null);
+      const entry = await addAnime({ ...payload, folderId: null });
       setAnimeList((prev) => [entry, ...prev]);
       setError(null);
     } catch (err) {
@@ -159,15 +176,32 @@ export function WatchlistApp() {
     }
   }
 
-  async function handleAddAnimeToFolder(title: string, folderId: string) {
+  async function handleAddAnimeToFolder(payload: AddAnimePayload, folderId: string) {
     try {
-      const entry = await addAnime(title, folderId);
+      const entry = await addAnime({ ...payload, folderId });
       setAnimeList((prev) => [entry, ...prev]);
       setError(null);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Anime konnte nicht gespeichert werden.",
       );
+    }
+  }
+
+  async function handleSyncMal() {
+    setIsSyncingMal(true);
+    try {
+      const enriched = await enrichMissingMalMetadata(animeList);
+      setAnimeList(enriched);
+      setError(null);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "MAL-Daten konnten nicht geladen werden.",
+      );
+    } finally {
+      setIsSyncingMal(false);
     }
   }
 
@@ -220,23 +254,39 @@ export function WatchlistApp() {
     }
   }
 
-  async function handleToggleWatch(animeId: string, memberName: string) {
+  async function handleDeleteAnime(animeId: string) {
     const anime = animeList.find((entry) => entry.id === animeId);
     if (!anime) return;
 
-    const hasWatched = anime.watchedBy.includes(memberName);
-    const nextWatchedBy = hasWatched
-      ? anime.watchedBy.filter((name) => name !== memberName)
-      : [...anime.watchedBy, memberName];
+    setAnimeList((prev) => prev.filter((entry) => entry.id !== animeId));
+
+    try {
+      await deleteAnime(animeId);
+      setError(null);
+    } catch (err) {
+      setAnimeList((prev) => [anime, ...prev]);
+      setError(
+        err instanceof Error ? err.message : "Anime konnte nicht gelöscht werden.",
+      );
+      throw err;
+    }
+  }
+
+  async function handleRenameAnime(animeId: string, title: string) {
+    const anime = animeList.find((entry) => entry.id === animeId);
+    if (!anime) return;
 
     setAnimeList((prev) =>
       prev.map((entry) =>
-        entry.id === animeId ? { ...entry, watchedBy: nextWatchedBy } : entry,
+        entry.id === animeId ? { ...entry, title } : entry,
       ),
     );
 
     try {
-      await updateWatchedBy(animeId, nextWatchedBy);
+      const updated = await renameAnime(animeId, title);
+      setAnimeList((prev) =>
+        prev.map((entry) => (entry.id === animeId ? updated : entry)),
+      );
       setError(null);
     } catch (err) {
       setAnimeList((prev) =>
@@ -245,7 +295,43 @@ export function WatchlistApp() {
       setError(
         err instanceof Error
           ? err.message
-          : "Fortschritt konnte nicht gespeichert werden.",
+          : "Anime konnte nicht umbenannt werden.",
+      );
+      throw err;
+    }
+  }
+
+  async function handleSetMyStatus(animeId: string, status: AnimeStatus) {
+    if (!currentUser) return;
+
+    const anime = animeList.find((entry) => entry.id === animeId);
+    if (!anime) return;
+
+    const nextStatuses = setMemberStatus(
+      anime.memberStatuses,
+      currentUser,
+      status,
+    );
+
+    setAnimeList((prev) =>
+      prev.map((entry) =>
+        entry.id === animeId
+          ? { ...entry, memberStatuses: nextStatuses }
+          : entry,
+      ),
+    );
+
+    try {
+      await updateMemberStatuses(animeId, nextStatuses);
+      setError(null);
+    } catch (err) {
+      setAnimeList((prev) =>
+        prev.map((entry) => (entry.id === animeId ? anime : entry)),
+      );
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Status konnte nicht gespeichert werden.",
       );
     }
   }
@@ -282,16 +368,16 @@ export function WatchlistApp() {
   }, [animeList, currentUser, filterOptions]);
 
   const stats = useMemo(() => {
-    if (!currentUser) return { total: 0, watched: 0, unwatched: 0 };
+    if (!currentUser) return { total: 0, finished: 0, open: 0 };
 
-    const watched = animeList.filter((a) =>
-      hasWatchedByMember(a.watchedBy, currentUser),
+    const finished = animeList.filter((a) =>
+      isFinishedStatus(getMemberStatus(a.memberStatuses, currentUser)),
     ).length;
 
     return {
       total: animeList.length,
-      watched,
-      unwatched: animeList.length - watched,
+      finished,
+      open: animeList.length - finished,
     };
   }, [animeList, currentUser]);
 
@@ -299,6 +385,7 @@ export function WatchlistApp() {
     return (
       <UserSelector
         members={sortedMembers}
+        allowedNames={allowedNames}
         onJoin={handleJoin}
         isSubmitting={isJoining}
         error={joinError}
@@ -346,8 +433,8 @@ export function WatchlistApp() {
           <div className="grid grid-cols-3 gap-3">
             {[
               { label: "Gesamt", value: stats.total },
-              { label: "Gesehen", value: stats.watched },
-              { label: "Offen", value: stats.unwatched },
+              { label: "Completed", value: stats.finished },
+              { label: "Open", value: stats.open },
             ].map((stat) => (
               <div
                 key={stat.label}
@@ -360,6 +447,49 @@ export function WatchlistApp() {
           </div>
         </header>
 
+        <div className="mb-8 flex gap-2">
+          <button
+            type="button"
+            onClick={() => setViewTab("list")}
+            className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
+              viewTab === "list"
+                ? "border-violet-500/50 bg-violet-600/20 text-violet-200"
+                : "border-slate-800 bg-slate-900/50 text-slate-400 hover:border-slate-700 hover:text-white"
+            }`}
+          >
+            <List className="h-4 w-4" />
+            Watchlist
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewTab("leaderboard")}
+            className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
+              viewTab === "leaderboard"
+                ? "border-violet-500/50 bg-violet-600/20 text-violet-200"
+                : "border-slate-800 bg-slate-900/50 text-slate-400 hover:border-slate-700 hover:text-white"
+            }`}
+          >
+            <Trophy className="h-4 w-4" />
+            Leaderboard
+          </button>
+        </div>
+
+        {viewTab === "leaderboard" ? (
+          isLoading ? (
+            <div className="flex justify-center py-16">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-violet-500 border-t-transparent" />
+            </div>
+          ) : (
+            <Leaderboard
+              members={sortedMembers}
+              animeList={animeList}
+              currentUser={currentUser}
+              isSyncingMal={isSyncingMal}
+              onSyncMal={() => void handleSyncMal()}
+            />
+          )
+        ) : (
+          <>
         {error && (
           <div className="mb-6 flex items-start gap-3 rounded-xl border border-red-500/30 bg-red-950/30 px-4 py-3 text-sm text-red-200">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -376,7 +506,8 @@ export function WatchlistApp() {
           <SortTabs active={sort} onChange={setSort} />
           {filter !== "all" && (
             <p className="text-xs text-slate-500">
-              Filter „{filter === "watched-by-me" ? "Geschaut" : "Nicht geschaut"}“
+              Filter „
+              {filter === "finished-by-me" ? "Abgeschlossen" : "Ohne Status"}“
               — Reihenfolge bleibt gleich, nur die Ansicht wird eingeschränkt.
             </p>
           )}
@@ -407,8 +538,10 @@ export function WatchlistApp() {
               onCreateFolder={handleCreateFolder}
               onDeleteFolder={handleDeleteFolder}
               onAddAnimeToFolder={handleAddAnimeToFolder}
-              onToggleWatch={handleToggleWatch}
+              onSetMyStatus={handleSetMyStatus}
               onMoveToFolder={handleMoveToFolder}
+              onRenameAnime={handleRenameAnime}
+              onDeleteAnime={handleDeleteAnime}
             />
 
             {!openFolderId && (
@@ -429,11 +562,15 @@ export function WatchlistApp() {
                   members={sortedMembers}
                   folders={folders}
                   currentUser={currentUser}
-                  onToggleWatch={handleToggleWatch}
+                  onSetMyStatus={handleSetMyStatus}
                   onMoveToFolder={handleMoveToFolder}
+                  onRenameAnime={handleRenameAnime}
+                  onDeleteAnime={handleDeleteAnime}
                 />
               </section>
             )}
+          </>
+        )}
           </>
         )}
       </div>

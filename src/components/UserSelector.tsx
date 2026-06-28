@@ -6,6 +6,7 @@ import type { Member } from "@/lib/types";
 
 type UserSelectorProps = {
   members: Member[];
+  allowedNames: string[] | null;
   onJoin: (name: string) => Promise<void>;
   isSubmitting?: boolean;
   error?: string | null;
@@ -13,6 +14,7 @@ type UserSelectorProps = {
 
 export function UserSelector({
   members,
+  allowedNames,
   onJoin,
   isSubmitting = false,
   error,
@@ -35,10 +37,17 @@ export function UserSelector({
           </div>
           <h1 className="text-2xl font-bold text-white">Anime Watchlist</h1>
           <p className="mt-2 text-sm text-slate-400">
-            Gib deinen Namen ein — jeder in der Gruppe kann sich selbst
-            eintragen.
+            Gib deinen Namen ein — nur freigeschaltete Personen können
+            mitmachen.
           </p>
         </div>
+
+        {allowedNames && allowedNames.length > 0 && (
+          <div className="mb-6 rounded-xl border border-violet-500/30 bg-violet-600/10 px-4 py-3 text-sm text-violet-200">
+            <p className="font-medium">Freigeschaltete Namen</p>
+            <p className="mt-1 text-violet-300/90">{allowedNames.join(", ")}</p>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -50,15 +59,13 @@ export function UserSelector({
               type="text"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="z. B. Alex, Ben, Mia …"
+              placeholder="z. B. Ricardo …"
               maxLength={30}
               className="w-full rounded-xl border border-slate-800 bg-slate-950/80 px-4 py-3 text-white placeholder:text-slate-500 outline-none transition focus:border-violet-500/60 focus:ring-2 focus:ring-violet-500/20"
             />
           </div>
 
-          {error && (
-            <p className="text-sm text-red-300">{error}</p>
-          )}
+          {error && <p className="text-sm text-red-300">{error}</p>}
 
           <button
             type="submit"

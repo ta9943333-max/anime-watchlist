@@ -1,6 +1,15 @@
-export type FilterOption = "all" | "watched-by-me" | "unwatched";
+import {
+  getMemberStatus,
+  isFinishedStatus,
+  type AnimeStatus,
+  type MemberStatuses,
+} from "@/lib/statuses";
+
+export type FilterOption = "all" | "finished-by-me" | "no-status";
 
 export type SortOption = "newest" | "title-asc" | "title-desc";
+
+export type ViewTab = "list" | "leaderboard";
 
 export type Member = {
   id: string;
@@ -17,9 +26,24 @@ export type Folder = {
 export type AnimeEntry = {
   id: string;
   title: string;
-  watchedBy: string[];
+  memberStatuses: MemberStatuses;
   folderId: string | null;
   createdAt: string;
+  malId: number | null;
+  episodes: number | null;
+  episodeDurationMin: number | null;
+  totalDurationMin: number | null;
+  genres: string[];
+};
+
+export type AddAnimePayload = {
+  title: string;
+  folderId?: string | null;
+  malId?: number | null;
+  episodes?: number | null;
+  episodeDurationMin?: number | null;
+  totalDurationMin?: number | null;
+  genres?: string[];
 };
 
 export function sortMembersByName(members: Member[]): Member[] {
@@ -58,7 +82,6 @@ export function sortAnimeList(
   }
 }
 
-/** Behält die aktuelle Listen-Reihenfolge bei, aktualisiert nur Inhalte. */
 export function mergeAnimeLists(
   prev: AnimeEntry[],
   incoming: AnimeEntry[],
@@ -79,27 +102,7 @@ export function mergeAnimeLists(
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 
-  const removedIds = new Set(
-    incoming.filter((entry) => !prevIds.has(entry.id)).map((e) => e.id),
-  );
-  void removedIds;
-
   return [...added, ...merged];
-}
-
-export function countWatchedByMembers(
-  watchedBy: string[],
-  members: Member[],
-): number {
-  const memberNames = new Set(members.map((m) => m.name));
-  return watchedBy.filter((name) => memberNames.has(name)).length;
-}
-
-export function hasWatchedByMember(
-  watchedBy: string[],
-  memberName: string,
-): boolean {
-  return watchedBy.includes(memberName);
 }
 
 export function applyAnimeFilters(
@@ -122,13 +125,15 @@ export function applyAnimeFilters(
   }
 
   result = result.filter((anime) => {
-    const watchedByMe = hasWatchedByMember(anime.watchedBy, options.currentUser);
+    const myStatus: AnimeStatus = options.currentUser
+      ? getMemberStatus(anime.memberStatuses, options.currentUser)
+      : "none";
 
     switch (options.filter) {
-      case "watched-by-me":
-        return watchedByMe;
-      case "unwatched":
-        return !watchedByMe;
+      case "finished-by-me":
+        return isFinishedStatus(myStatus);
+      case "no-status":
+        return myStatus === "none";
       default:
         return true;
     }

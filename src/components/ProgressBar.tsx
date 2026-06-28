@@ -1,9 +1,14 @@
 type ProgressBarProps = {
   value: number;
   max: number;
+  label?: string;
 };
 
-export function ProgressBar({ value, max }: ProgressBarProps) {
+export function ProgressBar({
+  value,
+  max,
+  label = "haben diesen Anime geschaut",
+}: ProgressBarProps) {
   const safeMax = Math.max(max, 0);
   const safeValue = Math.min(Math.max(value, 0), safeMax);
   const percent =
@@ -13,7 +18,7 @@ export function ProgressBar({ value, max }: ProgressBarProps) {
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-xs text-slate-400">
         <span>
-          {safeValue} von {safeMax} Freunden haben diesen Anime geschaut
+          {safeValue} von {safeMax} Freunden {label}
         </span>
         <span className="font-medium text-violet-400">{percent}%</span>
       </div>

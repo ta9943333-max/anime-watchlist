@@ -28,6 +28,26 @@ export async function fetchMembers(): Promise<Member[]> {
   return (data as MemberRow[]).map(mapRow);
 }
 
+export async function fetchAllowedMemberNames(): Promise<string[] | null> {
+  const { data, error } = await supabase
+    .from("allowed_members")
+    .select("name")
+    .order("name", { ascending: true });
+
+  if (error) {
+    if (
+      error.message.includes("does not exist") ||
+      error.code === "42P01" ||
+      error.code === "PGRST205"
+    ) {
+      return null;
+    }
+    throw new Error(error.message);
+  }
+
+  return (data as { name: string }[]).map((row) => row.name);
+}
+
 export async function registerMember(name: string): Promise<Member> {
   const trimmed = name.trim();
 
@@ -38,6 +58,14 @@ export async function registerMember(name: string): Promise<Member> {
     .single();
 
   if (error) {
+    if (
+      error.code === "42501" ||
+      error.message.toLowerCase().includes("policy")
+    ) {
+      throw new Error(
+        "Dieser Name ist nicht freigeschaltet. Bitte einen erlaubten Namen verwenden.",
+      );
+    }
     throw new Error(error.message);
   }
 

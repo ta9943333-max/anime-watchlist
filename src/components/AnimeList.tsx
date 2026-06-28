@@ -1,5 +1,6 @@
 import { Film } from "lucide-react";
 import { AnimeCard } from "@/components/AnimeCard";
+import type { AnimeStatus } from "@/lib/statuses";
 import type { AnimeEntry, Folder, Member } from "@/lib/types";
 
 type AnimeListProps = {
@@ -7,8 +8,10 @@ type AnimeListProps = {
   members: Member[];
   folders: Folder[];
   currentUser: string;
-  onToggleWatch: (animeId: string, memberName: string) => void;
+  onSetMyStatus: (animeId: string, status: AnimeStatus) => void;
   onMoveToFolder: (animeId: string, folderId: string | null) => void;
+  onRenameAnime: (animeId: string, title: string) => Promise<void>;
+  onDeleteAnime: (animeId: string) => Promise<void>;
   emptyMessage?: string;
 };
 
@@ -17,8 +20,10 @@ export function AnimeList({
   members,
   folders,
   currentUser,
-  onToggleWatch,
+  onSetMyStatus,
   onMoveToFolder,
+  onRenameAnime,
+  onDeleteAnime,
   emptyMessage = "Keine Anime in dieser Ansicht.",
 }: AnimeListProps) {
   if (animeList.length === 0) {
@@ -39,8 +44,10 @@ export function AnimeList({
           members={members}
           folders={folders}
           currentUser={currentUser}
-          onToggleWatch={onToggleWatch}
+          onSetMyStatus={onSetMyStatus}
           onMoveToFolder={onMoveToFolder}
+          onRenameAnime={onRenameAnime}
+          onDeleteAnime={onDeleteAnime}
         />
       ))}
     </div>

@@ -15,23 +15,41 @@ export type Database = {
       anime: {
         Row: {
           created_at: string;
+          episode_duration_min: number | null;
+          episodes: number | null;
           folder_id: string | null;
+          genres: string[];
           id: string;
+          mal_id: number | null;
+          member_statuses: Json;
           title: string;
+          total_duration_min: number | null;
           watched_by: string[];
         };
         Insert: {
           created_at?: string;
+          episode_duration_min?: number | null;
+          episodes?: number | null;
           folder_id?: string | null;
+          genres?: string[];
           id?: string;
+          mal_id?: number | null;
+          member_statuses?: Json;
           title: string;
+          total_duration_min?: number | null;
           watched_by?: string[];
         };
         Update: {
           created_at?: string;
+          episode_duration_min?: number | null;
+          episodes?: number | null;
           folder_id?: string | null;
+          genres?: string[];
           id?: string;
+          mal_id?: number | null;
+          member_statuses?: Json;
           title?: string;
+          total_duration_min?: number | null;
           watched_by?: string[];
         };
         Relationships: [];
@@ -68,6 +86,21 @@ export type Database = {
         Update: {
           created_at?: string;
           id?: string;
+          name?: string;
+        };
+        Relationships: [];
+      };
+      allowed_members: {
+        Row: {
+          created_at: string;
+          name: string;
+        };
+        Insert: {
+          created_at?: string;
+          name: string;
+        };
+        Update: {
+          created_at?: string;
           name?: string;
         };
         Relationships: [];
