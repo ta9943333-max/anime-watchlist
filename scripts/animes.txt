@@ -1,0 +1,8 @@
+# Ein Anime-Name pro Zeile (AniList-Suche)
+# Zeilen mit # werden ignoriert
+
+Frieren: Beyond Journey's End
+Solo Leveling Season 2
+One Piece
+Attack on Titan
+Steins;Gate
