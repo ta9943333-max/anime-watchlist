@@ -7,9 +7,11 @@ import {
   Heart,
   Loader2,
   RefreshCw,
+  Star,
   Trophy,
 } from "lucide-react";
 import {
+  buildAnimeRatingRanking,
   buildLeaderboard,
   getAllGenres,
   getTopGenreLeader,
@@ -17,7 +19,7 @@ import {
 } from "@/lib/stats/leaderboard";
 import type { AnimeEntry, Member } from "@/lib/types";
 
-type LeaderboardTab = "rankings" | "hours" | "genres" | "month";
+type LeaderboardTab = "rankings" | "hours" | "rated" | "genres" | "month";
 
 type LeaderboardProps = {
   members: Member[];
@@ -112,6 +114,11 @@ export function Leaderboard({
     [stats],
   );
 
+  const animeRanking = useMemo(
+    () => buildAnimeRatingRanking(animeList),
+    [animeList],
+  );
+
   const allGenres = useMemo(() => getAllGenres(animeList), [animeList]);
   const missingMalCount = useMemo(
     () => animeList.filter((anime) => !anime.totalDurationMin).length,
@@ -121,6 +128,7 @@ export function Leaderboard({
   const tabs: { id: LeaderboardTab; label: string; icon: typeof Trophy }[] = [
     { id: "rankings", label: "Completed", icon: Trophy },
     { id: "hours", label: "Hours", icon: Clock },
+    { id: "rated", label: "Top Anime", icon: Star },
     { id: "genres", label: "Genres", icon: Heart },
     { id: "month", label: "This Month", icon: Calendar },
   ];
@@ -180,8 +188,8 @@ export function Leaderboard({
                 key={member.name}
                 rank={index + 1}
                 member={member}
-                primary={`${member.completedCount} anime`}
-                secondary={`${member.totalHours}h · ${member.daysWatched} days watched`}
+                primary={`${member.completedCount} Serien`}
+                secondary={`${member.episodesWatched} Folgen · ${member.totalHours}h · ${member.daysWatched} Tage`}
                 highlight={member.name === currentUser}
               />
             ))
@@ -196,8 +204,8 @@ export function Leaderboard({
               key={member.name}
               rank={index + 1}
               member={member}
-              primary={`${member.totalHours} hours`}
-              secondary={`${member.completedCount} completed · ${member.daysWatched} days`}
+              primary={`${member.totalHours} Stunden`}
+              secondary={`${member.daysWatched} Tage · ${member.episodesWatched} Folgen`}
               highlight={member.name === currentUser}
             />
           ))}
@@ -206,6 +214,43 @@ export function Leaderboard({
               No runtime data yet. Use &quot;Sync MAL data&quot; to fetch episode
               lengths from MyAnimeList.
             </p>
+          )}
+        </div>
+      )}
+
+      {tab === "rated" && (
+        <div className="space-y-2">
+          <p className="text-sm text-slate-400">
+            Beliebteste Anime nach Durchschnittsbewertung der Gruppe (1–10).
+          </p>
+
+          {animeRanking.length === 0 ? (
+            <p className="py-8 text-center text-slate-500">
+              Noch keine Bewertungen. Bewerte Anime auf den Karten mit 1–10.
+            </p>
+          ) : (
+            animeRanking.map((entry, index) => (
+              <div
+                key={entry.id}
+                className="flex items-center gap-3 rounded-xl border border-slate-800/80 bg-slate-900/50 px-4 py-3"
+              >
+                <RankBadge rank={index + 1} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-white">
+                    {entry.title}
+                  </p>
+                  <p className="truncate text-xs text-slate-500">
+                    {entry.count} {entry.count === 1 ? "Stimme" : "Stimmen"}
+                    {entry.genres.length > 0 &&
+                      ` · ${entry.genres.slice(0, 3).join(", ")}`}
+                  </p>
+                </div>
+                <span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-amber-300">
+                  <Star className="h-4 w-4" />
+                  {entry.average}
+                </span>
+              </div>
+            ))
           )}
         </div>
       )}

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { ACCESS_COOKIE, getSiteAccessCode, isAccessGranted } from "@/lib/access";
+import { ACCESS_COOKIE, getAccessMode, isAccessGranted } from "@/lib/access";
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -14,7 +14,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (!getSiteAccessCode()) {
+  if (getAccessMode() === "open") {
     return NextResponse.next();
   }
 

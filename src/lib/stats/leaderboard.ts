@@ -2,22 +2,32 @@ import {
   FINISHED_STATUSES,
   getMemberStatus,
   getMemberStatusUpdatedAt,
-  type MemberStatuses,
 } from "@/lib/statuses";
-import type { AnimeEntry, Member } from "@/lib/types";
+import { getAverageRating, type AnimeEntry, type Member } from "@/lib/types";
 
 export type MemberLeaderboardStats = {
   name: string;
   completedCount: number;
+  episodesWatched: number;
   totalMinutes: number;
   totalHours: number;
   daysWatched: number;
+  averageRating: number;
+  ratedCount: number;
   topGenres: { genre: string; count: number }[];
   thisMonth: {
     completedCount: number;
     titles: string[];
     totalMinutes: number;
   };
+};
+
+export type AnimeRatingStats = {
+  id: string;
+  title: string;
+  average: number;
+  count: number;
+  genres: string[];
 };
 
 function getFinishedWeight(status: ReturnType<typeof getMemberStatus>): number {
@@ -39,18 +49,28 @@ function computeMemberStats(
   animeList: AnimeEntry[],
 ): MemberLeaderboardStats {
   let completedCount = 0;
+  let episodesWatched = 0;
   let totalMinutes = 0;
+  let ratingSum = 0;
+  let ratedCount = 0;
   const genreCounts = new Map<string, number>();
   const monthTitles: string[] = [];
   let monthMinutes = 0;
   let monthCompleted = 0;
 
   for (const anime of animeList) {
+    const rating = anime.ratings[memberName];
+    if (typeof rating === "number" && rating > 0) {
+      ratingSum += rating;
+      ratedCount += 1;
+    }
+
     const status = getMemberStatus(anime.memberStatuses, memberName);
     if (!FINISHED_STATUSES.includes(status)) continue;
 
     const weight = getFinishedWeight(status);
     completedCount += weight;
+    episodesWatched += (anime.episodes ?? 0) * weight;
 
     const minutes = anime.totalDurationMin ?? 0;
     totalMinutes += minutes * weight;
@@ -75,9 +95,12 @@ function computeMemberStats(
   return {
     name: memberName,
     completedCount: Math.round(completedCount * 10) / 10,
+    episodesWatched: Math.round(episodesWatched),
     totalMinutes: Math.round(totalMinutes),
     totalHours: Math.round((totalMinutes / 60) * 10) / 10,
     daysWatched: Math.round((totalMinutes / 60 / 24) * 10) / 10,
+    averageRating: ratedCount > 0 ? Math.round((ratingSum / ratedCount) * 10) / 10 : 0,
+    ratedCount,
     topGenres,
     thisMonth: {
       completedCount: Math.round(monthCompleted * 10) / 10,
@@ -85,6 +108,24 @@ function computeMemberStats(
       totalMinutes: Math.round(monthMinutes),
     },
   };
+}
+
+export function buildAnimeRatingRanking(
+  animeList: AnimeEntry[],
+): AnimeRatingStats[] {
+  return animeList
+    .map((anime) => {
+      const { average, count } = getAverageRating(anime.ratings);
+      return {
+        id: anime.id,
+        title: anime.title,
+        average,
+        count,
+        genres: anime.genres,
+      };
+    })
+    .filter((entry) => entry.count > 0)
+    .sort((a, b) => b.average - a.average || b.count - a.count);
 }
 
 export function buildLeaderboard(

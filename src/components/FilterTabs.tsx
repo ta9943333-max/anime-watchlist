@@ -1,3 +1,4 @@
+import { STATUS_OPTIONS } from "@/lib/statuses";
 import type { FilterOption } from "@/lib/types";
 
 type FilterTabsProps = {
@@ -7,8 +8,10 @@ type FilterTabsProps = {
 
 const FILTERS: { value: FilterOption; label: string }[] = [
   { value: "all", label: "Alle" },
-  { value: "finished-by-me", label: "Abgeschlossen" },
-  { value: "no-status", label: "Ohne Status" },
+  ...STATUS_OPTIONS.filter((option) => option.value !== "none").map(
+    (option) => ({ value: option.value as FilterOption, label: option.label }),
+  ),
+  { value: "no-status", label: "No status" },
 ];
 
 export function FilterTabs({ active, onChange }: FilterTabsProps) {
@@ -22,7 +25,7 @@ export function FilterTabs({ active, onChange }: FilterTabsProps) {
             key={filter.value}
             type="button"
             onClick={() => onChange(filter.value)}
-            className={`rounded-xl px-4 py-2 text-sm font-medium transition-all ${
+            className={`rounded-xl px-3.5 py-2 text-sm font-medium transition-all ${
               isActive
                 ? "bg-violet-600 text-white shadow-lg shadow-violet-900/40"
                 : "bg-slate-800/60 text-slate-300 hover:bg-slate-700/80 hover:text-white"

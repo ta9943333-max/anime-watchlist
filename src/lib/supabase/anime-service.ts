@@ -21,6 +21,22 @@ function parseMemberStatuses(row: AnimeRow): MemberStatuses {
   return migrateWatchedByToStatuses(row.watched_by ?? [], {});
 }
 
+function parseRatings(row: AnimeRow): Record<string, number> {
+  const raw = row.ratings;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return {};
+  }
+
+  const result: Record<string, number> = {};
+  for (const [name, value] of Object.entries(raw as Record<string, unknown>)) {
+    const num = typeof value === "number" ? value : Number(value);
+    if (Number.isFinite(num) && num >= 1 && num <= 10) {
+      result[name] = num;
+    }
+  }
+  return result;
+}
+
 function mapRow(row: AnimeRow): AnimeEntry {
   return {
     id: row.id,
@@ -33,6 +49,7 @@ function mapRow(row: AnimeRow): AnimeEntry {
     episodeDurationMin: row.episode_duration_min ?? null,
     totalDurationMin: row.total_duration_min ?? null,
     genres: row.genres ?? [],
+    ratings: parseRatings(row),
   };
 }
 
@@ -68,6 +85,7 @@ export async function addAnime(payload: AddAnimePayload): Promise<AnimeEntry> {
       episode_duration_min: payload.episodeDurationMin ?? null,
       total_duration_min: payload.totalDurationMin ?? null,
       genres: payload.genres ?? [],
+      ratings: {},
     })
     .select("*")
     .single();
@@ -210,6 +228,20 @@ export async function renameAnime(
 
 export async function deleteAnime(animeId: string): Promise<void> {
   const { error } = await supabase.from("anime").delete().eq("id", animeId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function updateRatings(
+  animeId: string,
+  ratings: Record<string, number>,
+): Promise<void> {
+  const { error } = await supabase
+    .from("anime")
+    .update({ ratings })
+    .eq("id", animeId);
 
   if (error) {
     throw new Error(error.message);

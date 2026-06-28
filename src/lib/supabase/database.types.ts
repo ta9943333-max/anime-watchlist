@@ -22,6 +22,7 @@ export type Database = {
           id: string;
           mal_id: number | null;
           member_statuses: Json;
+          ratings: Json;
           title: string;
           total_duration_min: number | null;
           watched_by: string[];
@@ -35,6 +36,7 @@ export type Database = {
           id?: string;
           mal_id?: number | null;
           member_statuses?: Json;
+          ratings?: Json;
           title: string;
           total_duration_min?: number | null;
           watched_by?: string[];
@@ -48,6 +50,7 @@ export type Database = {
           id?: string;
           mal_id?: number | null;
           member_statuses?: Json;
+          ratings?: Json;
           title?: string;
           total_duration_min?: number | null;
           watched_by?: string[];

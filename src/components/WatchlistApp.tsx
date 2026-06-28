@@ -19,6 +19,7 @@ import {
   renameAnime,
   subscribeToAnimeChanges,
   updateMemberStatuses,
+  updateRatings,
 } from "@/lib/supabase/anime-service";
 import {
   createFolder,
@@ -76,7 +77,28 @@ export function WatchlistApp() {
   const [error, setError] = useState<string | null>(null);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [allowedNames, setAllowedNames] = useState<string[] | null>(null);
+  const [accessMode, setAccessMode] = useState<"open" | "site" | "member">(
+    "open",
+  );
   const [folderSetupNeeded, setFolderSetupNeeded] = useState(false);
+
+  useEffect(() => {
+    void fetch("/api/access")
+      .then((res) => res.json())
+      .then(async (data: { mode: "open" | "site" | "member"; member: string | null }) => {
+        setAccessMode(data.mode);
+        if (data.mode === "member" && data.member) {
+          setCurrentUser(data.member);
+          saveCurrentUser(data.member);
+          try {
+            await registerMember(data.member);
+          } catch {
+            // Mitglied existiert bereits oder ist nicht freigeschaltet
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -158,7 +180,18 @@ export function WatchlistApp() {
     }
   }
 
-  function handleLogout() {
+  async function handleLogout() {
+    if (accessMode === "member") {
+      try {
+        await fetch("/api/access", { method: "DELETE" });
+      } catch {
+        // ignorieren
+      }
+      clearCurrentUser();
+      window.location.href = "/access";
+      return;
+    }
+
     setCurrentUser(null);
     setOpenFolderId(null);
     clearCurrentUser();
@@ -301,6 +334,40 @@ export function WatchlistApp() {
     }
   }
 
+  async function handleRateAnime(animeId: string, rating: number) {
+    if (!currentUser) return;
+
+    const anime = animeList.find((entry) => entry.id === animeId);
+    if (!anime) return;
+
+    const nextRatings = { ...anime.ratings };
+    if (rating > 0) {
+      nextRatings[currentUser] = rating;
+    } else {
+      delete nextRatings[currentUser];
+    }
+
+    setAnimeList((prev) =>
+      prev.map((entry) =>
+        entry.id === animeId ? { ...entry, ratings: nextRatings } : entry,
+      ),
+    );
+
+    try {
+      await updateRatings(animeId, nextRatings);
+      setError(null);
+    } catch (err) {
+      setAnimeList((prev) =>
+        prev.map((entry) => (entry.id === animeId ? anime : entry)),
+      );
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Bewertung konnte nicht gespeichert werden.",
+      );
+    }
+  }
+
   async function handleSetMyStatus(animeId: string, status: AnimeStatus) {
     if (!currentUser) return;
 
@@ -368,16 +435,27 @@ export function WatchlistApp() {
   }, [animeList, currentUser, filterOptions]);
 
   const stats = useMemo(() => {
-    if (!currentUser) return { total: 0, finished: 0, open: 0 };
+    if (!currentUser) {
+      return { series: 0, episodes: 0, hours: 0, days: 0 };
+    }
 
-    const finished = animeList.filter((a) =>
-      isFinishedStatus(getMemberStatus(a.memberStatuses, currentUser)),
-    ).length;
+    let series = 0;
+    let episodes = 0;
+    let minutes = 0;
+
+    for (const anime of animeList) {
+      if (isFinishedStatus(getMemberStatus(anime.memberStatuses, currentUser))) {
+        series += 1;
+        episodes += anime.episodes ?? 0;
+        minutes += anime.totalDurationMin ?? 0;
+      }
+    }
 
     return {
-      total: animeList.length,
-      finished,
-      open: animeList.length - finished,
+      series,
+      episodes,
+      hours: Math.round((minutes / 60) * 10) / 10,
+      days: Math.round((minutes / 60 / 24) * 10) / 10,
     };
   }, [animeList, currentUser]);
 
@@ -422,19 +500,20 @@ export function WatchlistApp() {
 
             <button
               type="button"
-              onClick={handleLogout}
+              onClick={() => void handleLogout()}
               className="inline-flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-400 transition hover:border-slate-700 hover:text-white"
             >
               <LogOut className="h-4 w-4" />
-              Wechseln
+              {accessMode === "member" ? "Logout" : "Wechseln"}
             </button>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[
-              { label: "Gesamt", value: stats.total },
-              { label: "Completed", value: stats.finished },
-              { label: "Open", value: stats.open },
+              { label: "Serien", value: stats.series },
+              { label: "Folgen", value: stats.episodes },
+              { label: "Stunden", value: stats.hours },
+              { label: "Tage", value: stats.days },
             ].map((stat) => (
               <div
                 key={stat.label}
@@ -506,9 +585,8 @@ export function WatchlistApp() {
           <SortTabs active={sort} onChange={setSort} />
           {filter !== "all" && (
             <p className="text-xs text-slate-500">
-              Filter „
-              {filter === "finished-by-me" ? "Abgeschlossen" : "Ohne Status"}“
-              — Reihenfolge bleibt gleich, nur die Ansicht wird eingeschränkt.
+              Gefiltert nach deinem Status — die Reihenfolge bleibt gleich, nur
+              die Ansicht wird eingeschränkt.
             </p>
           )}
         </section>
@@ -542,6 +620,7 @@ export function WatchlistApp() {
               onMoveToFolder={handleMoveToFolder}
               onRenameAnime={handleRenameAnime}
               onDeleteAnime={handleDeleteAnime}
+              onRateAnime={handleRateAnime}
             />
 
             {!openFolderId && (
@@ -566,6 +645,7 @@ export function WatchlistApp() {
                   onMoveToFolder={handleMoveToFolder}
                   onRenameAnime={handleRenameAnime}
                   onDeleteAnime={handleDeleteAnime}
+                  onRateAnime={handleRateAnime}
                 />
               </section>
             )}

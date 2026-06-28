@@ -22,6 +22,7 @@ type FolderSectionProps = {
   onMoveToFolder: (animeId: string, folderId: string | null) => void;
   onRenameAnime: (animeId: string, title: string) => Promise<void>;
   onDeleteAnime: (animeId: string) => Promise<void>;
+  onRateAnime: (animeId: string, rating: number) => void;
 };
 
 export function FolderSection({
@@ -39,6 +40,7 @@ export function FolderSection({
   onMoveToFolder,
   onRenameAnime,
   onDeleteAnime,
+  onRateAnime,
 }: FolderSectionProps) {
   const [newFolderName, setNewFolderName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
@@ -110,6 +112,7 @@ export function FolderSection({
           onMoveToFolder={onMoveToFolder}
           onRenameAnime={onRenameAnime}
           onDeleteAnime={onDeleteAnime}
+          onRateAnime={onRateAnime}
           emptyMessage="Noch keine Anime in diesem Ordner."
         />
       </section>

@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { FolderInput, Pencil, Trash2, X, Check } from "lucide-react";
+import { FolderInput, Pencil, Star, Trash2, X, Check } from "lucide-react";
 import { ProgressBar } from "@/components/ProgressBar";
 import { StatusBadge } from "@/components/StatusBadge";
 import {
@@ -12,7 +12,13 @@ import {
   STATUS_OPTIONS,
   type AnimeStatus,
 } from "@/lib/statuses";
-import { sortMembersByName, type AnimeEntry, type Folder, type Member } from "@/lib/types";
+import {
+  getAverageRating,
+  sortMembersByName,
+  type AnimeEntry,
+  type Folder,
+  type Member,
+} from "@/lib/types";
 
 type AnimeCardProps = {
   anime: AnimeEntry;
@@ -23,7 +29,10 @@ type AnimeCardProps = {
   onMoveToFolder: (animeId: string, folderId: string | null) => void;
   onRenameAnime: (animeId: string, title: string) => Promise<void>;
   onDeleteAnime: (animeId: string) => Promise<void>;
+  onRateAnime: (animeId: string, rating: number) => void;
 };
+
+const RATING_VALUES = Array.from({ length: 10 }, (_, index) => index + 1);
 
 export function AnimeCard({
   anime,
@@ -34,6 +43,7 @@ export function AnimeCard({
   onMoveToFolder,
   onRenameAnime,
   onDeleteAnime,
+  onRateAnime,
 }: AnimeCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(anime.title);
@@ -46,6 +56,8 @@ export function AnimeCard({
   const myStatus = getMemberStatus(anime.memberStatuses, currentUser);
   const myMeta = getStatusMeta(myStatus);
   const otherMembers = sortedMembers.filter((m) => m.name !== currentUser);
+  const myRating = anime.ratings[currentUser] ?? 0;
+  const { average, count } = getAverageRating(anime.ratings);
 
   async function handleRenameSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -156,6 +168,19 @@ export function AnimeCard({
         )}
       </div>
 
+      {anime.genres.length > 0 && (
+        <div className="mb-4 flex flex-wrap gap-1.5">
+          {anime.genres.map((genre) => (
+            <span
+              key={genre}
+              className="rounded-md border border-slate-800 bg-slate-950/60 px-2 py-0.5 text-xs text-slate-400"
+            >
+              {genre}
+            </span>
+          ))}
+        </div>
+      )}
+
       <ProgressBar
         value={finishedCount}
         max={members.length}
@@ -182,6 +207,34 @@ export function AnimeCard({
           </select>
         </div>
 
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <label className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-amber-300">
+              <Star className="h-3.5 w-3.5" />
+              Deine Bewertung
+            </label>
+            {count > 0 && (
+              <span className="text-xs text-slate-400">
+                Ø {average} · {count} {count === 1 ? "Stimme" : "Stimmen"}
+              </span>
+            )}
+          </div>
+          <select
+            value={myRating}
+            onChange={(event) =>
+              onRateAnime(anime.id, Number(event.target.value))
+            }
+            className="w-full rounded-xl border border-amber-500/30 bg-slate-950/80 px-3 py-2.5 text-sm text-amber-100 outline-none focus:ring-2 focus:ring-amber-500/30"
+          >
+            <option value={0}>Keine Bewertung</option>
+            {RATING_VALUES.map((value) => (
+              <option key={value} value={value}>
+                {value} / 10
+              </option>
+            ))}
+          </select>
+        </div>
+
         {otherMembers.length > 0 && (
           <div>
             <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -190,6 +243,7 @@ export function AnimeCard({
             <div className="flex flex-wrap gap-2">
               {otherMembers.map((member) => {
                 const status = getMemberStatus(anime.memberStatuses, member.name);
+                const rating = anime.ratings[member.name] ?? 0;
 
                 return (
                   <div
@@ -200,6 +254,12 @@ export function AnimeCard({
                       {member.name}
                     </span>
                     <StatusBadge status={status} compact />
+                    {rating > 0 && (
+                      <span className="flex items-center gap-0.5 text-xs font-medium text-amber-300">
+                        <Star className="h-3 w-3" />
+                        {rating}
+                      </span>
+                    )}
                   </div>
                 );
               })}

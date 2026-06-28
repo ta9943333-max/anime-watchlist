@@ -1,11 +1,10 @@
 import {
   getMemberStatus,
-  isFinishedStatus,
   type AnimeStatus,
   type MemberStatuses,
 } from "@/lib/statuses";
 
-export type FilterOption = "all" | "finished-by-me" | "no-status";
+export type FilterOption = "all" | "no-status" | AnimeStatus;
 
 export type SortOption = "newest" | "title-asc" | "title-desc";
 
@@ -34,7 +33,23 @@ export type AnimeEntry = {
   episodeDurationMin: number | null;
   totalDurationMin: number | null;
   genres: string[];
+  ratings: Record<string, number>;
 };
+
+export function getAverageRating(ratings: Record<string, number>): {
+  average: number;
+  count: number;
+} {
+  const values = Object.values(ratings).filter(
+    (value) => typeof value === "number" && value > 0,
+  );
+  if (values.length === 0) return { average: 0, count: 0 };
+  const sum = values.reduce((total, value) => total + value, 0);
+  return {
+    average: Math.round((sum / values.length) * 10) / 10,
+    count: values.length,
+  };
+}
 
 export type AddAnimePayload = {
   title: string;
@@ -130,12 +145,12 @@ export function applyAnimeFilters(
       : "none";
 
     switch (options.filter) {
-      case "finished-by-me":
-        return isFinishedStatus(myStatus);
+      case "all":
+        return true;
       case "no-status":
         return myStatus === "none";
       default:
-        return true;
+        return myStatus === options.filter;
     }
   });
 

@@ -12,6 +12,7 @@ type AnimeListProps = {
   onMoveToFolder: (animeId: string, folderId: string | null) => void;
   onRenameAnime: (animeId: string, title: string) => Promise<void>;
   onDeleteAnime: (animeId: string) => Promise<void>;
+  onRateAnime: (animeId: string, rating: number) => void;
   emptyMessage?: string;
 };
 
@@ -24,6 +25,7 @@ export function AnimeList({
   onMoveToFolder,
   onRenameAnime,
   onDeleteAnime,
+  onRateAnime,
   emptyMessage = "Keine Anime in dieser Ansicht.",
 }: AnimeListProps) {
   if (animeList.length === 0) {
@@ -48,6 +50,7 @@ export function AnimeList({
           onMoveToFolder={onMoveToFolder}
           onRenameAnime={onRenameAnime}
           onDeleteAnime={onDeleteAnime}
+          onRateAnime={onRateAnime}
         />
       ))}
     </div>
