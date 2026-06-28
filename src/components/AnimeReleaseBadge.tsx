@@ -77,6 +77,9 @@ export function releaseFieldsFromAnime(anime: {
   malSeason?: string | null;
   malYear?: number | null;
   malStatus?: string | null;
+  nextEpisode?: number | null;
+  timeUntilAiring?: number | null;
+  airingAt?: number | null;
 }): AnimeReleaseFields {
   return {
     airedFrom: anime.airedFrom ?? null,
@@ -86,5 +89,8 @@ export function releaseFieldsFromAnime(anime: {
     malSeason: anime.malSeason ?? null,
     malYear: anime.malYear ?? null,
     malStatus: anime.malStatus ?? null,
+    nextEpisode: anime.nextEpisode ?? null,
+    timeUntilAiring: anime.timeUntilAiring ?? null,
+    airingAt: anime.airingAt ?? null,
   };
 }

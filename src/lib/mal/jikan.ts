@@ -18,6 +18,17 @@ export type MalSearchResult = {
   synopsis: string | null;
   studios: string[];
   score: number | null;
+  nextEpisode?: number | null;
+  timeUntilAiring?: number | null;
+  airingAt?: number | null;
+  anilistStatus?: string | null;
+};
+
+import type { AnimeStatus } from "@/lib/statuses";
+
+export type DiscoverItem = MalSearchResult & {
+  watchlistId?: string;
+  myStatus?: AnimeStatus;
 };
 
 export function parseMalDuration(

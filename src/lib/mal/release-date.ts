@@ -6,6 +6,9 @@ export type AnimeReleaseFields = {
   malSeason: string | null;
   malYear: number | null;
   malStatus: string | null;
+  nextEpisode?: number | null;
+  timeUntilAiring?: number | null;
+  airingAt?: number | null;
 };
 
 const BERLIN_TZ = "Europe/Berlin";
@@ -146,6 +149,24 @@ export function getCountdownTarget(
   info: AnimeReleaseFields,
   now = new Date(),
 ): { date: Date; label: string } | null {
+  if (
+    info.nextEpisode &&
+    info.timeUntilAiring != null &&
+    info.timeUntilAiring > 0
+  ) {
+    return {
+      date: new Date(now.getTime() + info.timeUntilAiring * 1000),
+      label: `EP${info.nextEpisode} · TV (JP)`,
+    };
+  }
+
+  if (info.nextEpisode && info.airingAt && info.airingAt * 1000 > now.getTime()) {
+    return {
+      date: new Date(info.airingAt * 1000),
+      label: `EP${info.nextEpisode} · TV (JP)`,
+    };
+  }
+
   if (info.malStatus === "Currently Airing") {
     const nextBroadcast = getNextBroadcastDate(info, now);
     if (nextBroadcast) {
