@@ -18,8 +18,17 @@ type DiscoverAnimeCardProps = {
   alreadyAdded: boolean;
   isAdding: boolean;
   onAdd: () => void;
+  onAddWithStatus?: (status: AnimeStatus) => void;
+  allowQuickStatus?: boolean;
   onSetMyStatus?: (animeId: string, status: AnimeStatus) => void;
 };
+
+const QUICK_STATUS_OPTIONS: AnimeStatus[] = [
+  "completed",
+  "watching",
+  "planning",
+  "considering",
+];
 
 function formatEpisodeLine(anime: DiscoverItem): string {
   const epCount = anime.episodes ? String(anime.episodes) : "?";
@@ -34,6 +43,8 @@ export function DiscoverAnimeCard({
   alreadyAdded,
   isAdding,
   onAdd,
+  onAddWithStatus,
+  allowQuickStatus = false,
   onSetMyStatus,
 }: DiscoverAnimeCardProps) {
   const releaseInfo = useMemo(() => releaseFieldsFromAnime(anime), [anime]);
@@ -171,7 +182,33 @@ export function DiscoverAnimeCard({
               </div>
             )}
 
-            {!alreadyAdded && (
+            {!alreadyAdded && allowQuickStatus && onAddWithStatus && (
+              <div className="min-w-0 flex-1 space-y-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-violet-300">
+                  Add & mark as
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {QUICK_STATUS_OPTIONS.map((status) => {
+                    const label =
+                      STATUS_OPTIONS.find((option) => option.value === status)
+                        ?.label ?? status;
+                    return (
+                      <button
+                        key={status}
+                        type="button"
+                        disabled={isAdding}
+                        onClick={() => onAddWithStatus(status)}
+                        className="rounded-lg border border-violet-500/40 bg-violet-600/15 px-3 py-2 text-xs font-medium text-violet-100 transition hover:bg-violet-600/30 disabled:opacity-50"
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {!alreadyAdded && !allowQuickStatus && (
               <button
                 type="button"
                 disabled={isAdding}

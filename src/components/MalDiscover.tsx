@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarClock,
+  Globe2,
   Library,
   Loader2,
   Search,
@@ -36,10 +37,14 @@ type MalDiscoverProps = {
   animeList: AnimeEntry[];
   currentUser: string;
   onAdd: (payload: AddAnimePayload) => Promise<void>;
+  onAddWithStatus: (
+    payload: AddAnimePayload,
+    status: AnimeStatus,
+  ) => Promise<void>;
   onSetMyStatus: (animeId: string, status: AnimeStatus) => void;
 };
 
-type DiscoverView = "search" | "airing" | "upcoming" | "my-list";
+type DiscoverView = "search" | "all" | "airing" | "upcoming" | "my-list";
 
 type StatusFilter = "all" | AnimeStatus;
 
@@ -53,6 +58,13 @@ const VIEW_META: Record<
     description:
       "Search any anime on MyAnimeList — add to your watchlist or set Planning / Watching directly.",
     icon: Search,
+  },
+  all: {
+    label: "All Anime",
+    title: "All seasonal anime",
+    description:
+      "Everything from this and upcoming seasons — mark Completed or Watching to update your stats.",
+    icon: Globe2,
   },
   airing: {
     label: "Airing",
@@ -90,6 +102,39 @@ function sortByCountdown(items: DiscoverItem[]): DiscoverItem[] {
   });
 }
 
+function dedupeByMalId(items: DiscoverItem[]): DiscoverItem[] {
+  const seen = new Map<number, DiscoverItem>();
+  for (const item of items) {
+    if (item.malId > 0 && !seen.has(item.malId)) {
+      seen.set(item.malId, item);
+    }
+  }
+  return [...seen.values()];
+}
+
+function attachWatchlistMeta(
+  items: DiscoverItem[],
+  animeList: AnimeEntry[],
+  currentUser: string,
+): DiscoverItem[] {
+  const byMalId = new Map<number, AnimeEntry>();
+  for (const anime of animeList) {
+    if (anime.malId) byMalId.set(anime.malId, anime);
+  }
+
+  return items.map((item) => {
+    const inList = byMalId.get(item.malId);
+    return {
+      ...item,
+      watchlistId: inList?.id ?? item.watchlistId,
+      myStatus: inList
+        ? getMemberStatus(inList.memberStatuses, currentUser)
+        : (item.myStatus ?? "none"),
+      title: inList ? getDisplayTitle(inList) : item.title,
+    };
+  });
+}
+
 async function enrichItems(items: DiscoverItem[]): Promise<DiscoverItem[]> {
   const malIds = items.map((item) => item.malId).filter((id) => id > 0);
   if (malIds.length === 0) return items;
@@ -102,9 +147,10 @@ export function MalDiscover({
   animeList,
   currentUser,
   onAdd,
+  onAddWithStatus,
   onSetMyStatus,
 }: MalDiscoverProps) {
-  const [view, setView] = useState<DiscoverView>("airing");
+  const [view, setView] = useState<DiscoverView>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [results, setResults] = useState<DiscoverItem[]>([]);
@@ -112,6 +158,7 @@ export function MalDiscover({
   const [addingId, setAddingId] = useState<number | null>(null);
   const [genreFilter, setGenreFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const loadSeqRef = useRef(0);
 
   const watchlistByMalId = useMemo(() => {
     const map = new Map<number, AnimeEntry>();
@@ -127,93 +174,85 @@ export function MalDiscover({
   }, [searchQuery]);
 
   useEffect(() => {
-    let cancelled = false;
+    const seq = ++loadSeqRef.current;
+    setResults([]);
+    setIsLoading(true);
 
     async function load() {
-      setIsLoading(true);
-
       try {
         if (view === "my-list") {
           let items = animeList.map((anime) =>
             animeEntryToDiscoverItem(anime, currentUser),
           );
+          items = dedupeByMalId(items);
           items = await enrichItems(items);
-          if (!cancelled) setResults(items);
+          if (seq !== loadSeqRef.current) return;
+          setResults(attachWatchlistMeta(items, animeList, currentUser));
           return;
         }
 
         if (view === "search") {
           if (debouncedQuery.length < 2) {
-            if (!cancelled) {
-              setResults([]);
-              setIsLoading(false);
-            }
+            if (seq !== loadSeqRef.current) return;
+            setResults([]);
             return;
           }
           const found = await searchMalAnime(debouncedQuery);
-          let items: DiscoverItem[] = found.map((item) => {
-            const inList = watchlistByMalId.get(item.malId);
-            return {
-              ...item,
-              watchlistId: inList?.id,
-              myStatus: inList
-                ? getMemberStatus(inList.memberStatuses, currentUser)
-                : "none",
-            };
-          });
+          let items = dedupeByMalId(found);
           items = await enrichItems(items);
-          if (!cancelled) setResults(items);
+          if (seq !== loadSeqRef.current) return;
+          setResults(attachWatchlistMeta(items, animeList, currentUser));
+          return;
+        }
+
+        if (view === "all") {
+          const [nowItems, upcomingItems] = await Promise.all([
+            fetchMalSeason("now"),
+            fetchMalSeason("upcoming"),
+          ]);
+          let items = dedupeByMalId([...nowItems, ...upcomingItems]);
+          items = await enrichItems(items);
+          if (seq !== loadSeqRef.current) return;
+          setResults(attachWatchlistMeta(items, animeList, currentUser));
           return;
         }
 
         const seasonFilter = view === "airing" ? "now" : "upcoming";
         const seasonItems = await fetchMalSeason(seasonFilter);
 
-        let items: DiscoverItem[] = seasonItems
-          .filter((item) =>
-            view === "airing"
-              ? item.malStatus === "Currently Airing"
-              : item.malStatus === "Not yet aired",
-          )
-          .map((item) => {
-            const inList = watchlistByMalId.get(item.malId);
-            return {
-              ...item,
-              watchlistId: inList?.id,
-              myStatus: inList
-                ? getMemberStatus(inList.memberStatuses, currentUser)
-                : "none",
-            };
-          });
+        let items: DiscoverItem[] = seasonItems.filter((item) =>
+          view === "airing"
+            ? item.malStatus === "Currently Airing"
+            : item.malStatus === "Not yet aired",
+        );
 
+        items = dedupeByMalId(items);
         items = await enrichItems(items);
 
         if (view === "airing") {
           items = items.filter((item) =>
             isCurrentlyAiring(releaseFieldsFromAnime(item)),
           );
-        }
-
-        if (view === "upcoming") {
+        } else {
           items = items.filter((item) =>
             isTrulyUpcoming(releaseFieldsFromAnime(item)),
           );
         }
 
-        if (!cancelled) setResults(items);
+        if (seq !== loadSeqRef.current) return;
+        setResults(attachWatchlistMeta(items, animeList, currentUser));
       } catch {
-        if (!cancelled) setResults([]);
+        if (seq !== loadSeqRef.current) return;
+        setResults([]);
       } finally {
-        if (!cancelled) setIsLoading(false);
+        if (seq === loadSeqRef.current) {
+          setIsLoading(false);
+        }
       }
     }
 
     void load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [view, debouncedQuery, animeList, currentUser, watchlistByMalId]);
+  }, [view, debouncedQuery, animeList, currentUser]);
 
   const genres = useMemo(() => {
     const set = new Set<string>();
@@ -259,8 +298,21 @@ export function MalDiscover({
     }
   }
 
+  async function handleAddWithStatus(
+    item: DiscoverItem,
+    status: AnimeStatus,
+  ) {
+    setAddingId(item.malId);
+    try {
+      await onAddWithStatus(addPayloadFromDiscoverItem(item), status);
+    } finally {
+      setAddingId(null);
+    }
+  }
+
   const meta = VIEW_META[view];
   const showSearchHint = view === "search" && debouncedQuery.length < 2;
+  const allowQuickStatus = view === "all" || view === "my-list" || view === "search";
 
   return (
     <section className="space-y-8">
@@ -280,6 +332,8 @@ export function MalDiscover({
               type="button"
               onClick={() => {
                 setView(key);
+                setResults([]);
+                setIsLoading(true);
                 setGenreFilter(null);
                 setStatusFilter("all");
                 if (key !== "search") setSearchQuery("");
@@ -414,17 +468,21 @@ export function MalDiscover({
               watchlistId: inList?.id ?? result.watchlistId,
               myStatus: inList
                 ? getMemberStatus(inList.memberStatuses, currentUser)
-                : result.myStatus ?? "none",
+                : (result.myStatus ?? "none"),
               title: inList ? getDisplayTitle(inList) : result.title,
             };
 
             return (
               <DiscoverAnimeCard
-                key={`${result.malId}-${result.watchlistId ?? "new"}`}
+                key={result.malId}
                 anime={item}
                 alreadyAdded={Boolean(inList ?? result.watchlistId)}
                 isAdding={addingId === result.malId}
                 onAdd={() => void handleAdd(result)}
+                onAddWithStatus={(status) =>
+                  void handleAddWithStatus(result, status)
+                }
+                allowQuickStatus={allowQuickStatus}
                 onSetMyStatus={onSetMyStatus}
               />
             );

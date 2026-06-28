@@ -181,6 +181,7 @@ export function getNextBroadcastDate(
 }
 
 export function isCurrentlyAiring(info: AnimeReleaseFields): boolean {
+  if (info.malStatus === "Not yet aired") return false;
   if (info.malStatus === "Currently Airing") return true;
   if (info.anilistStatus === "RELEASING") return true;
   if (info.nextEpisode != null && info.nextEpisode > 1) return true;
@@ -190,13 +191,13 @@ export function isCurrentlyAiring(info: AnimeReleaseFields): boolean {
 export function isTrulyUpcoming(info: AnimeReleaseFields): boolean {
   if (isCurrentlyAiring(info)) return false;
   if (info.malStatus === "Finished Airing") return false;
+  if (info.malStatus === "Currently Airing") return false;
   if (info.anilistStatus === "FINISHED") return false;
   if (info.anilistStatus === "RELEASING") return false;
 
   return (
     info.malStatus === "Not yet aired" ||
-    info.anilistStatus === "NOT_YET_RELEASED" ||
-    info.anilistStatus == null
+    info.anilistStatus === "NOT_YET_RELEASED"
   );
 }
 

@@ -243,6 +243,43 @@ export function WatchlistApp() {
     }
   }
 
+  async function handleAddWithStatus(
+    payload: AddAnimePayload,
+    status: AnimeStatus,
+  ) {
+    if (!currentUser) return;
+
+    try {
+      const { entry, merged } = await addOrMergeAnime(payload, animeList);
+      const nextStatuses = setMemberStatus(
+        entry.memberStatuses,
+        currentUser,
+        status,
+      );
+      await updateMemberStatuses(entry.id, nextStatuses);
+      const updatedEntry = { ...entry, memberStatuses: nextStatuses };
+
+      setAnimeList((prev) => {
+        if (merged) {
+          return prev.map((item) =>
+            item.id === updatedEntry.id ? updatedEntry : item,
+          );
+        }
+        if (prev.some((item) => item.id === updatedEntry.id)) {
+          return prev.map((item) =>
+            item.id === updatedEntry.id ? updatedEntry : item,
+          );
+        }
+        return [updatedEntry, ...prev];
+      });
+      setError(null);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Anime konnte nicht gespeichert werden.",
+      );
+    }
+  }
+
   async function handleAddAnimeToFolder(payload: AddAnimePayload, folderId: string) {
     try {
       const { entry, merged } = await addOrMergeAnime(
@@ -646,6 +683,7 @@ export function WatchlistApp() {
               animeList={animeList}
               currentUser={currentUser}
               onAdd={handleAddAnime}
+              onAddWithStatus={handleAddWithStatus}
               onSetMyStatus={handleSetMyStatus}
             />
           )
