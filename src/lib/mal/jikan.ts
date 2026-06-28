@@ -92,3 +92,72 @@ export async function fetchMalSeason(
   const data = (await response.json()) as { results: MalSearchResult[] };
   return data.results;
 }
+
+export type MalTopType = "popular" | "airing" | "season" | "year";
+
+export async function fetchMalTop(
+  type: MalTopType,
+  limit = 25,
+): Promise<MalSearchResult[]> {
+  const response = await fetch(
+    `/api/mal/top?type=${type}&limit=${limit}`,
+  );
+
+  if (!response.ok) {
+    throw new Error("MyAnimeList top fetch failed");
+  }
+
+  const data = (await response.json()) as { results: MalSearchResult[] };
+  return data.results;
+}
+
+export async function fetchMalAnimeDetails(
+  malIds: number[],
+): Promise<Map<number, MalSearchResult>> {
+  if (malIds.length === 0) return new Map();
+
+  const unique = [...new Set(malIds.filter((id) => id > 0))];
+  const map = new Map<number, MalSearchResult>();
+
+  for (let i = 0; i < unique.length; i += 8) {
+    const batch = unique.slice(i, i + 8);
+    const response = await fetch(
+      `/api/mal/details?ids=${batch.join(",")}`,
+    );
+
+    if (!response.ok) continue;
+
+    const data = (await response.json()) as { results: MalSearchResult[] };
+    for (const item of data.results) {
+      map.set(item.malId, item);
+    }
+  }
+
+  return map;
+}
+
+export async function hydrateDiscoverImages(
+  items: DiscoverItem[],
+): Promise<DiscoverItem[]> {
+  const missingIds = items
+    .filter((item) => item.malId > 0 && !item.imageUrl)
+    .map((item) => item.malId);
+
+  if (missingIds.length === 0) return items;
+
+  const details = await fetchMalAnimeDetails(missingIds);
+
+  return items.map((item) => {
+    const extra = details.get(item.malId);
+    if (!extra) return item;
+
+    return {
+      ...item,
+      imageUrl: item.imageUrl ?? extra.imageUrl,
+      synopsis: item.synopsis ?? extra.synopsis,
+      studios: item.studios.length > 0 ? item.studios : extra.studios,
+      score: item.score ?? extra.score,
+      malStatus: item.malStatus ?? extra.malStatus,
+    };
+  });
+}

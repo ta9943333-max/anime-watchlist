@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarClock,
+  Clapperboard,
+  Dices,
   Globe2,
-  Library,
   Loader2,
   Search,
+  Sparkles,
   Tv,
 } from "lucide-react";
 import { DiscoverAnimeCard } from "@/components/DiscoverAnimeCard";
@@ -17,14 +19,19 @@ import {
 } from "@/lib/anilist/client";
 import {
   addPayloadFromDiscoverItem,
-  animeEntryToDiscoverItem,
 } from "@/lib/mal/discover-utils";
 import {
   fetchMalSeason,
+  fetchMalTop,
+  hydrateDiscoverImages,
   searchMalAnime,
   type DiscoverItem,
 } from "@/lib/mal/jikan";
-import { getCountdownTarget, isCurrentlyAiring, isTrulyUpcoming } from "@/lib/mal/release-date";
+import {
+  getCountdownTarget,
+  isCurrentlyAiring,
+  isTrulyUpcoming,
+} from "@/lib/mal/release-date";
 import { getDisplayTitle, type AnimeEntry } from "@/lib/types";
 import {
   STATUS_OPTIONS,
@@ -44,19 +51,31 @@ type MalDiscoverProps = {
   onSetMyStatus: (animeId: string, status: AnimeStatus) => void;
 };
 
-type DiscoverView = "search" | "all" | "airing" | "upcoming" | "my-list";
-
+type DiscoverView = "pick" | "search" | "all" | "airing" | "upcoming";
+type PickMode = "season" | "year" | "lucky";
 type StatusFilter = "all" | AnimeStatus;
+
+type ResultState = {
+  view: DiscoverView;
+  items: DiscoverItem[];
+};
 
 const VIEW_META: Record<
   DiscoverView,
   { label: string; title: string; description: string; icon: typeof Search }
 > = {
+  pick: {
+    label: "What to watch",
+    title: "What to watch",
+    description:
+      "Popular picks this season or year — or hit Feeling lucky for a random anime to start tonight.",
+    icon: Clapperboard,
+  },
   search: {
     label: "Search",
     title: "Search all anime",
     description:
-      "Search any anime on MyAnimeList — add to your watchlist or set Planning / Watching directly.",
+      "Browse popular anime or search MyAnimeList — add to your watchlist or set a status directly.",
     icon: Search,
   },
   all: {
@@ -70,22 +89,33 @@ const VIEW_META: Record<
     label: "Airing",
     title: "Currently airing",
     description:
-      "Shows running right now with live countdown to the next episode (via AniList — e.g. Mushoku Tensei EP2 when EP1 is out).",
+      "Shows running right now with live countdown to the next episode.",
     icon: Tv,
   },
   upcoming: {
     label: "Upcoming",
     title: "Upcoming anime",
     description:
-      "Not yet aired or premiering soon. Search within upcoming titles below.",
+      "Not yet aired or premiering soon. Filter upcoming titles below.",
     icon: CalendarClock,
   },
-  "my-list": {
-    label: "My List",
-    title: "Your watchlist",
-    description:
-      "All anime in your shared list — filter by Planning, Watching, Completed and more.",
-    icon: Library,
+};
+
+const PICK_MODE_META: Record<
+  PickMode,
+  { label: string; description: string }
+> = {
+  season: {
+    label: "This season",
+    description: "Top-rated anime airing this season.",
+  },
+  year: {
+    label: "This year",
+    description: "Best anime from all seasons this year.",
+  },
+  lucky: {
+    label: "Feeling lucky",
+    description: "One random pick — roll again until something clicks.",
   },
 };
 
@@ -100,6 +130,10 @@ function sortByCountdown(items: DiscoverItem[]): DiscoverItem[] {
     if (targetB) return 1;
     return a.title.localeCompare(b.title, "en", { sensitivity: "base" });
   });
+}
+
+function sortByScore(items: DiscoverItem[]): DiscoverItem[] {
+  return [...items].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 }
 
 function dedupeByMalId(items: DiscoverItem[]): DiscoverItem[] {
@@ -137,10 +171,19 @@ function attachWatchlistMeta(
 
 async function enrichItems(items: DiscoverItem[]): Promise<DiscoverItem[]> {
   const malIds = items.map((item) => item.malId).filter((id) => id > 0);
-  if (malIds.length === 0) return items;
+  let enriched = items;
 
-  const airingMap = await fetchAnilistNextEpisodes(malIds);
-  return mergeAnilistAiring(items, airingMap);
+  if (malIds.length > 0) {
+    const airingMap = await fetchAnilistNextEpisodes(malIds);
+    enriched = mergeAnilistAiring(enriched, airingMap);
+  }
+
+  return hydrateDiscoverImages(enriched);
+}
+
+function pickRandomItem(items: DiscoverItem[]): DiscoverItem | null {
+  if (items.length === 0) return null;
+  return items[Math.floor(Math.random() * items.length)] ?? null;
 }
 
 export function MalDiscover({
@@ -150,15 +193,24 @@ export function MalDiscover({
   onAddWithStatus,
   onSetMyStatus,
 }: MalDiscoverProps) {
-  const [view, setView] = useState<DiscoverView>("all");
+  const [view, setView] = useState<DiscoverView>("pick");
+  const [pickMode, setPickMode] = useState<PickMode>("season");
+  const [luckyPick, setLuckyPick] = useState<DiscoverItem | null>(null);
+  const [luckyPool, setLuckyPool] = useState<DiscoverItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [results, setResults] = useState<DiscoverItem[]>([]);
+  const [resultState, setResultState] = useState<ResultState>({
+    view: "pick",
+    items: [],
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [addingId, setAddingId] = useState<number | null>(null);
   const [genreFilter, setGenreFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const loadSeqRef = useRef(0);
+
+  const results =
+    resultState.view === view ? resultState.items : [];
 
   const watchlistByMalId = useMemo(() => {
     const map = new Map<number, AnimeEntry>();
@@ -173,39 +225,47 @@ export function MalDiscover({
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  const rollLucky = useCallback((pool: DiscoverItem[]) => {
+    setLuckyPick(pickRandomItem(pool));
+  }, []);
+
   useEffect(() => {
+    const activeView = view;
+    const activePickMode = pickMode;
     const seq = ++loadSeqRef.current;
-    setResults([]);
+    setResultState({ view: activeView, items: [] });
     setIsLoading(true);
+    if (activeView !== "pick" || activePickMode !== "lucky") {
+      setLuckyPick(null);
+    }
 
     async function load() {
       try {
-        if (view === "my-list") {
-          let items = animeList.map((anime) =>
-            animeEntryToDiscoverItem(anime, currentUser),
-          );
-          items = dedupeByMalId(items);
-          items = await enrichItems(items);
-          if (seq !== loadSeqRef.current) return;
-          setResults(attachWatchlistMeta(items, animeList, currentUser));
-          return;
-        }
-
-        if (view === "search") {
-          if (debouncedQuery.length < 2) {
+        if (activeView === "search") {
+          if (debouncedQuery.length >= 2) {
+            const found = await searchMalAnime(debouncedQuery);
+            let items = dedupeByMalId(found);
+            items = await enrichItems(items);
             if (seq !== loadSeqRef.current) return;
-            setResults([]);
+            setResultState({
+              view: activeView,
+              items: attachWatchlistMeta(items, animeList, currentUser),
+            });
             return;
           }
-          const found = await searchMalAnime(debouncedQuery);
-          let items = dedupeByMalId(found);
+
+          const popular = await fetchMalTop("popular", 25);
+          let items = dedupeByMalId(popular);
           items = await enrichItems(items);
           if (seq !== loadSeqRef.current) return;
-          setResults(attachWatchlistMeta(items, animeList, currentUser));
+          setResultState({
+            view: activeView,
+            items: attachWatchlistMeta(items, animeList, currentUser),
+          });
           return;
         }
 
-        if (view === "all") {
+        if (activeView === "all") {
           const [nowItems, upcomingItems] = await Promise.all([
             fetchMalSeason("now"),
             fetchMalSeason("upcoming"),
@@ -213,15 +273,46 @@ export function MalDiscover({
           let items = dedupeByMalId([...nowItems, ...upcomingItems]);
           items = await enrichItems(items);
           if (seq !== loadSeqRef.current) return;
-          setResults(attachWatchlistMeta(items, animeList, currentUser));
+          setResultState({
+            view: activeView,
+            items: attachWatchlistMeta(items, animeList, currentUser),
+          });
           return;
         }
 
-        const seasonFilter = view === "airing" ? "now" : "upcoming";
+        if (activeView === "pick") {
+          if (activePickMode === "lucky") {
+            const [seasonItems, popularItems] = await Promise.all([
+              fetchMalTop("season", 40),
+              fetchMalTop("popular", 40),
+            ]);
+            let pool = dedupeByMalId([...seasonItems, ...popularItems]);
+            pool = await enrichItems(pool);
+            pool = attachWatchlistMeta(pool, animeList, currentUser);
+            if (seq !== loadSeqRef.current) return;
+            setLuckyPool(pool);
+            setLuckyPick(pickRandomItem(pool));
+            setResultState({ view: activeView, items: pool });
+            return;
+          }
+
+          const topType = activePickMode === "year" ? "year" : "season";
+          const topItems = await fetchMalTop(topType, 25);
+          let items = dedupeByMalId(topItems);
+          items = await enrichItems(items);
+          if (seq !== loadSeqRef.current) return;
+          setResultState({
+            view: activeView,
+            items: attachWatchlistMeta(items, animeList, currentUser),
+          });
+          return;
+        }
+
+        const seasonFilter = activeView === "airing" ? "now" : "upcoming";
         const seasonItems = await fetchMalSeason(seasonFilter);
 
         let items: DiscoverItem[] = seasonItems.filter((item) =>
-          view === "airing"
+          activeView === "airing"
             ? item.malStatus === "Currently Airing"
             : item.malStatus === "Not yet aired",
         );
@@ -229,7 +320,7 @@ export function MalDiscover({
         items = dedupeByMalId(items);
         items = await enrichItems(items);
 
-        if (view === "airing") {
+        if (activeView === "airing") {
           items = items.filter((item) =>
             isCurrentlyAiring(releaseFieldsFromAnime(item)),
           );
@@ -240,10 +331,13 @@ export function MalDiscover({
         }
 
         if (seq !== loadSeqRef.current) return;
-        setResults(attachWatchlistMeta(items, animeList, currentUser));
+        setResultState({
+          view: activeView,
+          items: attachWatchlistMeta(items, animeList, currentUser),
+        });
       } catch {
         if (seq !== loadSeqRef.current) return;
-        setResults([]);
+        setResultState({ view: activeView, items: [] });
       } finally {
         if (seq === loadSeqRef.current) {
           setIsLoading(false);
@@ -252,7 +346,7 @@ export function MalDiscover({
     }
 
     void load();
-  }, [view, debouncedQuery, animeList, currentUser]);
+  }, [view, pickMode, debouncedQuery, animeList, currentUser]);
 
   const genres = useMemo(() => {
     const set = new Set<string>();
@@ -286,8 +380,12 @@ export function MalDiscover({
       );
     }
 
+    if (view === "pick" && pickMode !== "lucky") {
+      return sortByScore(list);
+    }
+
     return sortByCountdown(list);
-  }, [results, genreFilter, statusFilter, searchQuery, view]);
+  }, [results, genreFilter, statusFilter, searchQuery, view, pickMode]);
 
   async function handleAdd(item: DiscoverItem) {
     setAddingId(item.malId);
@@ -310,9 +408,33 @@ export function MalDiscover({
     }
   }
 
+  function renderDiscoverCard(result: DiscoverItem) {
+    const inList = watchlistByMalId.get(result.malId);
+    const item: DiscoverItem = {
+      ...result,
+      watchlistId: inList?.id ?? result.watchlistId,
+      myStatus: inList
+        ? getMemberStatus(inList.memberStatuses, currentUser)
+        : (result.myStatus ?? "none"),
+      title: inList ? getDisplayTitle(inList) : result.title,
+    };
+
+    return (
+      <DiscoverAnimeCard
+        key={result.malId}
+        anime={item}
+        alreadyAdded={Boolean(inList ?? result.watchlistId)}
+        isAdding={addingId === result.malId}
+        onAdd={() => void handleAdd(result)}
+        onAddWithStatus={(status) => void handleAddWithStatus(result, status)}
+        allowQuickStatus={view === "all" || view === "search"}
+        onSetMyStatus={onSetMyStatus}
+      />
+    );
+  }
+
   const meta = VIEW_META[view];
-  const showSearchHint = view === "search" && debouncedQuery.length < 2;
-  const allowQuickStatus = view === "all" || view === "my-list" || view === "search";
+  const showLucky = view === "pick" && pickMode === "lucky";
 
   return (
     <section className="space-y-8">
@@ -321,6 +443,13 @@ export function MalDiscover({
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-400">
           {meta.description}
         </p>
+        {view !== "pick" && (
+          <p className="mt-3 text-xs text-slate-500">
+            Deine persönliche Liste findest du oben unter{" "}
+            <span className="font-medium text-violet-300">Watchlist</span> — hier
+            geht es nur ums Entdecken und Hinzufügen.
+          </p>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -332,7 +461,7 @@ export function MalDiscover({
               type="button"
               onClick={() => {
                 setView(key);
-                setResults([]);
+                setResultState({ view: key, items: [] });
                 setIsLoading(true);
                 setGenreFilter(null);
                 setStatusFilter("all");
@@ -351,142 +480,188 @@ export function MalDiscover({
         })}
       </div>
 
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-        <input
-          type="search"
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-          placeholder={
-            view === "search"
-              ? "Search any anime on MyAnimeList…"
-              : "Filter current list…"
-          }
-          className="w-full rounded-xl border border-slate-700 bg-slate-950/80 py-3.5 pl-11 pr-4 text-white placeholder:text-slate-500 outline-none focus:border-sky-500/60 focus:ring-2 focus:ring-sky-500/20"
-        />
-      </div>
-
-      <div className="space-y-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-          Your status
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setStatusFilter("all")}
-            className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-              statusFilter === "all"
-                ? "bg-violet-600 text-white"
-                : "bg-slate-800/80 text-slate-400 hover:text-white"
-            }`}
-          >
-            All
-          </button>
-          {STATUS_OPTIONS.filter((option) => option.value !== "none").map(
-            (option) => (
+      {view === "pick" && (
+        <div className="space-y-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            Pick your vibe
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {(Object.keys(PICK_MODE_META) as PickMode[]).map((mode) => (
               <button
-                key={option.value}
+                key={mode}
                 type="button"
-                onClick={() =>
-                  setStatusFilter(
-                    statusFilter === option.value ? "all" : option.value,
-                  )
-                }
+                onClick={() => {
+                  setPickMode(mode);
+                  setResultState({ view: "pick", items: [] });
+                  setIsLoading(true);
+                }}
                 className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                  statusFilter === option.value
+                  pickMode === mode
+                    ? "bg-amber-600 text-white"
+                    : "bg-slate-800/80 text-slate-400 hover:text-white"
+                }`}
+              >
+                {PICK_MODE_META[mode].label}
+              </button>
+            ))}
+          </div>
+          <p className="text-sm text-slate-500">
+            {PICK_MODE_META[pickMode].description}
+          </p>
+        </div>
+      )}
+
+      {!showLucky && (
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder={
+              view === "search"
+                ? "Search any anime on MyAnimeList…"
+                : "Filter current list…"
+            }
+            className="w-full rounded-xl border border-slate-700 bg-slate-950/80 py-3.5 pl-11 pr-4 text-white placeholder:text-slate-500 outline-none focus:border-sky-500/60 focus:ring-2 focus:ring-sky-500/20"
+          />
+        </div>
+      )}
+
+      {!showLucky && (
+        <>
+          <div className="space-y-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Your status
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setStatusFilter("all")}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                  statusFilter === "all"
                     ? "bg-violet-600 text-white"
                     : "bg-slate-800/80 text-slate-400 hover:text-white"
                 }`}
               >
-                {option.label}
+                All
               </button>
-            ),
-          )}
-        </div>
-      </div>
-
-      {genres.length > 0 && (
-        <div className="space-y-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-            Genre
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setGenreFilter(null)}
-              className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                genreFilter === null
-                  ? "bg-sky-600 text-white"
-                  : "bg-slate-800/80 text-slate-400 hover:text-white"
-              }`}
-            >
-              All
-            </button>
-            {genres.map((genre) => (
-              <button
-                key={genre}
-                type="button"
-                onClick={() =>
-                  setGenreFilter(genre === genreFilter ? null : genre)
-                }
-                className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                  genreFilter === genre
-                    ? "bg-sky-600 text-white"
-                    : "bg-slate-800/80 text-slate-400 hover:text-white"
-                }`}
-              >
-                {genre}
-              </button>
-            ))}
+              {STATUS_OPTIONS.filter((option) => option.value !== "none").map(
+                (option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() =>
+                      setStatusFilter(
+                        statusFilter === option.value ? "all" : option.value,
+                      )
+                    }
+                    className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                      statusFilter === option.value
+                        ? "bg-violet-600 text-white"
+                        : "bg-slate-800/80 text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ),
+              )}
+            </div>
           </div>
+
+          {genres.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Genre
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setGenreFilter(null)}
+                  className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                    genreFilter === null
+                      ? "bg-sky-600 text-white"
+                      : "bg-slate-800/80 text-slate-400 hover:text-white"
+                  }`}
+                >
+                  All
+                </button>
+                {genres.map((genre) => (
+                  <button
+                    key={genre}
+                    type="button"
+                    onClick={() =>
+                      setGenreFilter(genre === genreFilter ? null : genre)
+                    }
+                    className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                      genreFilter === genre
+                        ? "bg-sky-600 text-white"
+                        : "bg-slate-800/80 text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    {genre}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {view === "search" && debouncedQuery.length < 2 && !isLoading && (
+        <div className="flex items-center gap-2 text-sm text-slate-500">
+          <Sparkles className="h-4 w-4 text-amber-400" />
+          Showing popular anime — type to search all of MyAnimeList.
         </div>
       )}
 
-      <p className="text-xs uppercase tracking-wide text-slate-500">
-        {filteredResults.length} titles
-      </p>
+      {!showLucky && (
+        <p className="text-xs uppercase tracking-wide text-slate-500">
+          {filteredResults.length} titles
+        </p>
+      )}
 
       {isLoading ? (
         <div className="flex items-center justify-center gap-3 py-24 text-slate-400">
           <Loader2 className="h-6 w-6 animate-spin" />
           Loading…
         </div>
-      ) : showSearchHint ? (
-        <p className="py-24 text-center text-slate-500">
-          Type at least 2 characters to search all anime on MyAnimeList.
-        </p>
+      ) : showLucky ? (
+        luckyPick ? (
+          <div className="space-y-6">
+            <div className="flex flex-col items-center gap-4 rounded-2xl border border-amber-500/30 bg-amber-950/20 px-6 py-8 text-center">
+              <Dices className="h-10 w-10 text-amber-400" />
+              <div>
+                <p className="text-lg font-semibold text-white">
+                  Tonight&apos;s pick
+                </p>
+                <p className="mt-1 text-sm text-slate-400">
+                  {luckyPool.length} anime in the pool
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => rollLucky(luckyPool)}
+                className="inline-flex items-center gap-2 rounded-xl border border-amber-500/50 bg-amber-600/20 px-5 py-2.5 text-sm font-medium text-amber-100 transition hover:bg-amber-600/35"
+              >
+                <Dices className="h-4 w-4" />
+                Feeling lucky — roll again
+              </button>
+            </div>
+            {renderDiscoverCard(luckyPick)}
+          </div>
+        ) : (
+          <p className="py-24 text-center text-slate-500">
+            Could not load anime for a random pick. Try again.
+          </p>
+        )
       ) : filteredResults.length === 0 ? (
         <p className="py-24 text-center text-slate-500">
           No anime found for this filter.
         </p>
       ) : (
         <div className="flex flex-col gap-8">
-          {filteredResults.map((result) => {
-            const inList = watchlistByMalId.get(result.malId);
-            const item: DiscoverItem = {
-              ...result,
-              watchlistId: inList?.id ?? result.watchlistId,
-              myStatus: inList
-                ? getMemberStatus(inList.memberStatuses, currentUser)
-                : (result.myStatus ?? "none"),
-              title: inList ? getDisplayTitle(inList) : result.title,
-            };
-
-            return (
-              <DiscoverAnimeCard
-                key={result.malId}
-                anime={item}
-                alreadyAdded={Boolean(inList ?? result.watchlistId)}
-                isAdding={addingId === result.malId}
-                onAdd={() => void handleAdd(result)}
-                onAddWithStatus={(status) =>
-                  void handleAddWithStatus(result, status)
-                }
-                allowQuickStatus={allowQuickStatus}
-                onSetMyStatus={onSetMyStatus}
-              />
-            );
-          })}
+          {filteredResults.map((result) => renderDiscoverCard(result))}
         </div>
       )}
     </section>
