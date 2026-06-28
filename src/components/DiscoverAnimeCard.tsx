@@ -46,9 +46,9 @@ export function DiscoverAnimeCard({
       }
       actions={
         alreadyAdded && anime.watchlistId && onSetMyStatus ? (
-          <div className="space-y-3 rounded-lg border border-violet-500/25 bg-violet-950/20 p-3">
+          <div className="space-y-2 rounded-lg border border-violet-500/25 bg-violet-950/20 p-2">
             <div>
-              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-violet-300">
+              <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-violet-300">
                 Dein Status
               </label>
               <select
@@ -59,7 +59,7 @@ export function DiscoverAnimeCard({
                     event.target.value as AnimeStatus,
                   )
                 }
-                className="w-full max-w-sm rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-violet-500/60"
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white outline-none focus:border-violet-500/60"
               >
                 {STATUS_OPTIONS.map((option) => (
                   <option
@@ -92,7 +92,7 @@ export function DiscoverAnimeCard({
             type="button"
             disabled={isAdding}
             onClick={onAdd}
-            className="inline-flex items-center gap-2 rounded-lg border border-violet-500/50 bg-violet-600/20 px-4 py-2 text-sm font-medium text-violet-100 transition hover:bg-violet-600/35 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-violet-500/50 bg-violet-600/20 px-3 py-1.5 text-xs font-medium text-violet-100 transition hover:bg-violet-600/35 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isAdding ? (
               <Loader2 className="h-4 w-4 animate-spin" />

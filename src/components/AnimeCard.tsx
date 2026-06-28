@@ -199,26 +199,26 @@ export function AnimeCard({
         </>
       }
       actions={
-        <div className="space-y-4">
+        <div className="space-y-2">
           {isEditing && (
             <form
               onSubmit={handleRenameSubmit}
-              className="flex flex-wrap items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-950/20 p-3"
+              className="flex flex-wrap items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-950/20 p-2"
             >
               <input
                 value={editTitle}
                 onChange={(event) => setEditTitle(event.target.value)}
                 maxLength={120}
                 autoFocus
-                className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-violet-500/30"
+                className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white outline-none focus:ring-2 focus:ring-violet-500/30"
               />
               <button
                 type="submit"
                 disabled={isSaving || !editTitle.trim()}
-                className="rounded-lg border border-emerald-500/40 p-2 text-emerald-300 transition hover:bg-emerald-950/40 disabled:opacity-40"
+                className="rounded-lg border border-emerald-500/40 p-1.5 text-emerald-300 transition hover:bg-emerald-950/40 disabled:opacity-40"
                 title="Speichern"
               >
-                <Check className="h-4 w-4" />
+                <Check className="h-3.5 w-3.5" />
               </button>
               <button
                 type="button"
@@ -226,10 +226,10 @@ export function AnimeCard({
                   setIsEditing(false);
                   setEditTitle(anime.title);
                 }}
-                className="rounded-lg border border-slate-700 p-2 text-slate-400 transition hover:bg-slate-800"
+                className="rounded-lg border border-slate-700 p-1.5 text-slate-400 transition hover:bg-slate-800"
                 title="Abbrechen"
               >
-                <X className="h-4 w-4" />
+                <X className="h-3.5 w-3.5" />
               </button>
             </form>
           )}
@@ -240,8 +240,8 @@ export function AnimeCard({
             label="haben abgeschlossen"
           />
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-lg border border-violet-500/25 bg-violet-950/20 p-3">
+          <div className="grid gap-2">
+            <div className="rounded-lg border border-violet-500/25 bg-violet-950/20 p-2.5">
               <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-violet-300">
                 Dein Status
               </label>
@@ -250,7 +250,7 @@ export function AnimeCard({
                 onChange={(event) =>
                   onSetMyStatus(anime.id, event.target.value as AnimeStatus)
                 }
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-violet-500/60"
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white outline-none focus:border-violet-500/60"
               >
                 {STATUS_OPTIONS.map((option) => (
                   <option
@@ -273,7 +273,7 @@ export function AnimeCard({
               />
             </div>
 
-            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-2.5">
               <div className="mb-1.5 flex items-center justify-between gap-2">
                 <label className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-amber-300">
                   <Star className="h-3.5 w-3.5" />
@@ -290,7 +290,7 @@ export function AnimeCard({
                 onChange={(event) =>
                   onRateAnime(anime.id, Number(event.target.value))
                 }
-                className="w-full rounded-lg border border-amber-500/30 bg-slate-950/80 px-3 py-2 text-sm text-amber-100 outline-none focus:ring-2 focus:ring-amber-500/30"
+                className="w-full rounded-lg border border-amber-500/30 bg-slate-950/80 px-2 py-1.5 text-xs text-amber-100 outline-none focus:ring-2 focus:ring-amber-500/30"
               >
                 <option value={0}>Keine Bewertung</option>
                 {RATING_VALUES.map((value) => (

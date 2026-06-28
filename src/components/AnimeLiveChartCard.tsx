@@ -24,6 +24,9 @@ export type AnimeLiveChartData = AnimeReleaseFields & {
   synopsis?: string | null;
 };
 
+export const ANIME_CARD_GRID =
+  "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4";
+
 type AnimeLiveChartCardProps = {
   anime: AnimeLiveChartData;
   headerRight?: ReactNode;
@@ -85,28 +88,28 @@ export function AnimeLiveChartCard({
 
   return (
     <article
-      className={`overflow-hidden rounded-lg border border-slate-700/70 bg-[#161920] shadow-sm transition hover:border-slate-600/80 ${
+      className={`flex h-full flex-col overflow-hidden rounded-lg border border-slate-700/70 bg-[#161920] shadow-sm transition hover:border-slate-600/80 ${
         accentClassName ?? ""
       }`}
     >
-      <div className="border-b border-slate-700/50 px-4 py-3 sm:px-5">
-        <div className="flex items-start justify-between gap-3">
-          <h3 className="text-lg font-bold leading-snug text-sky-400 sm:text-xl">
+      <div className="border-b border-slate-700/50 px-3 py-2.5">
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="line-clamp-2 text-sm font-bold leading-snug text-sky-400">
             {anime.title}
           </h3>
           {headerRight ? (
-            <div className="flex shrink-0 items-center gap-2">{headerRight}</div>
+            <div className="flex shrink-0 items-center gap-1">{headerRight}</div>
           ) : null}
         </div>
         {anime.genres.length > 0 && (
-          <p className="mt-1.5 text-xs leading-relaxed text-slate-500 sm:text-sm">
+          <p className="mt-1 line-clamp-1 text-[11px] leading-relaxed text-slate-500">
             {formatGenreLine(anime.genres)}
           </p>
         )}
       </div>
 
-      <div className="flex flex-col sm:flex-row">
-        <div className="relative mx-auto w-full max-w-[140px] shrink-0 sm:mx-0 sm:w-[132px]">
+      <div className="flex min-h-0 flex-1 flex-row">
+        <div className="relative w-[96px] shrink-0 sm:w-[104px]">
           {countdownTarget && countdown && (
             <div className="absolute inset-x-0 top-0 z-10 bg-black/90 px-2 py-1.5 text-center">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
@@ -139,16 +142,16 @@ export function AnimeLiveChartCard({
           )}
         </div>
 
-        <div className="min-w-0 flex-1 space-y-2 px-4 py-4 sm:px-5">
+        <div className="min-w-0 flex-1 space-y-1 px-2.5 py-2.5">
           {anime.studios && anime.studios.length > 0 && (
-            <p className="text-sm font-medium text-sky-300/90">
+            <p className="line-clamp-1 text-xs font-medium text-sky-300/90">
               {anime.studios.join(", ")}
             </p>
           )}
 
           {releaseLabel && (
             <p
-              className={`text-sm ${
+              className={`line-clamp-1 text-xs ${
                 releaseLabel === NO_RELEASE_DATA
                   ? "italic text-slate-500"
                   : "text-slate-300"
@@ -158,23 +161,23 @@ export function AnimeLiveChartCard({
             </p>
           )}
 
-          <p className="text-sm text-slate-500">{formatEpisodeLine(anime)}</p>
+          <p className="text-xs text-slate-500">{formatEpisodeLine(anime)}</p>
 
           {anime.synopsis ? (
-            <p className="line-clamp-4 text-sm leading-6 text-slate-400">
+            <p className="line-clamp-3 text-xs leading-5 text-slate-400">
               {anime.synopsis}
             </p>
           ) : (
-            <p className="text-sm italic text-slate-600">
-              No synopsis has been added to this title yet.
+            <p className="text-xs italic text-slate-600">
+              No synopsis yet.
             </p>
           )}
 
-          {actions ? <div className="pt-3">{actions}</div> : null}
+          {actions ? <div className="pt-2">{actions}</div> : null}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-700/50 px-4 py-2.5 sm:px-5">
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-slate-700/50 px-3 py-2">
         <div className="flex flex-wrap items-center gap-2">
           {malUrl && (
             <a

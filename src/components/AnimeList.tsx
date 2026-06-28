@@ -1,4 +1,5 @@
 import { Film } from "lucide-react";
+import { ANIME_CARD_GRID } from "@/components/AnimeLiveChartCard";
 import { AnimeCard } from "@/components/AnimeCard";
 import type { AnimeStatus } from "@/lib/statuses";
 import type { AnimeEntry, Folder, Member } from "@/lib/types";
@@ -42,7 +43,7 @@ export function AnimeList({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className={ANIME_CARD_GRID}>
       {animeList.map((anime) => (
         <AnimeCard
           key={anime.id}

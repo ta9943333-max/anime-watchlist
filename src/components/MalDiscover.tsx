@@ -16,6 +16,7 @@ import {
   Tv,
 } from "lucide-react";
 import { DiscoverAnimeCard } from "@/components/DiscoverAnimeCard";
+import { ANIME_CARD_GRID } from "@/components/AnimeLiveChartCard";
 import { releaseFieldsFromAnime } from "@/components/AnimeReleaseBadge";
 import {
   fetchAnilistNextEpisodes,
@@ -1004,7 +1005,7 @@ export function MalDiscover({
           No anime found for this filter.
         </p>
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className={ANIME_CARD_GRID}>
           {filteredResults.map((result) => renderDiscoverCard(result))}
           {showListPagination && listPagination && (
             <BrowsePagination
