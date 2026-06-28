@@ -10,6 +10,7 @@ import { GenreFilter } from "@/components/GenreFilter";
 import { Leaderboard } from "@/components/Leaderboard";
 import { MalDiscover } from "@/components/MalDiscover";
 import { MemberProfileModal } from "@/components/MemberProfileModal";
+import { MonthlyRecapModal } from "@/components/MonthlyRecapModal";
 import { SearchBar } from "@/components/SearchBar";
 import { SortTabs } from "@/components/SortTabs";
 import { UserSelector } from "@/components/UserSelector";
@@ -42,9 +43,13 @@ import {
 } from "@/lib/supabase/member-service";
 import {
   clearCurrentUser,
+  getRecapMonthToShow,
+  hasSeenRecap,
   loadCurrentUser,
+  markRecapSeen,
   saveCurrentUser,
 } from "@/lib/storage";
+import { buildMonthlyRecap, type MonthlyRecap } from "@/lib/stats/leaderboard";
 import {
   getMemberStatus,
   getMemberEpisodesWatched,
@@ -94,6 +99,8 @@ export function WatchlistApp() {
     "open",
   );
   const [profileName, setProfileName] = useState<string | null>(null);
+  const [recap, setRecap] = useState<MonthlyRecap | null>(null);
+  const recapCheckedRef = useRef(false);
   const [folderSetupNeeded, setFolderSetupNeeded] = useState(false);
   const didAutoSyncRef = useRef(false);
   const skipRemoteSyncUntilRef = useRef(0);
@@ -105,6 +112,28 @@ export function WatchlistApp() {
   function shouldSkipRemoteSync() {
     return Date.now() < skipRemoteSyncUntilRef.current;
   }
+
+  useEffect(() => {
+    if (recapCheckedRef.current) return;
+    if (!currentUser || isLoading || members.length === 0) return;
+
+    const target = getRecapMonthToShow();
+    recapCheckedRef.current = true;
+
+    if (!target || hasSeenRecap(target.year, target.month)) return;
+
+    const built = buildMonthlyRecap(
+      members,
+      animeList,
+      target.year,
+      target.month,
+    );
+    if (built.totalCompleted > 0) {
+      setRecap(built);
+    } else {
+      markRecapSeen(target.year, target.month);
+    }
+  }, [currentUser, isLoading, members, animeList]);
 
   useEffect(() => {
     void fetch("/api/access")
@@ -866,6 +895,17 @@ export function WatchlistApp() {
           animeList={animeList}
           isCurrentUser={profileName === currentUser}
           onClose={() => setProfileName(null)}
+        />
+      )}
+
+      {recap && currentUser && (
+        <MonthlyRecapModal
+          recap={recap}
+          currentUser={currentUser}
+          onClose={() => {
+            markRecapSeen(recap.year, recap.month);
+            setRecap(null);
+          }}
         />
       )}
     </div>

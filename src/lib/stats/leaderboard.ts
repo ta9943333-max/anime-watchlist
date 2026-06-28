@@ -321,6 +321,149 @@ export function buildMemberProfile(
   return { stats, groups };
 }
 
+export type MonthlyRecapMember = {
+  name: string;
+  completedCount: number;
+  episodesWatched: number;
+  totalHours: number;
+  titles: string[];
+};
+
+export type MonthlyRecap = {
+  year: number;
+  month: number;
+  label: string;
+  totalCompleted: number;
+  totalHours: number;
+  members: MonthlyRecapMember[];
+  topMember: MonthlyRecapMember | null;
+  favorite: { title: string; average: number; count: number } | null;
+};
+
+function isInMonth(isoDate: string | null, year: number, month: number): boolean {
+  if (!isoDate) return false;
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime()) || date.getFullYear() <= 1970) return false;
+  return date.getFullYear() === year && date.getMonth() === month;
+}
+
+export function buildMonthlyRecap(
+  members: Member[],
+  animeList: AnimeEntry[],
+  year: number,
+  month: number,
+): MonthlyRecap {
+  const recapMembers: MonthlyRecapMember[] = members.map((member) => {
+    let completedCount = 0;
+    let episodesWatched = 0;
+    let totalMinutes = 0;
+    const titles: string[] = [];
+
+    for (const anime of animeList) {
+      const status = getMemberStatus(anime.memberStatuses, member.name);
+      if (!FINISHED_STATUSES.includes(status)) continue;
+      const updatedAt = getMemberStatusUpdatedAt(
+        anime.memberStatuses,
+        member.name,
+      );
+      if (!isInMonth(updatedAt, year, month)) continue;
+
+      const weight = getFinishedWeight(status);
+      const progressMinutes = getMemberProgressMinutes(
+        anime.memberStatuses,
+        member.name,
+        anime.episodes,
+        anime.episodeDurationMin,
+        anime.totalDurationMin,
+      );
+      const minutes = anime.totalDurationMin ?? progressMinutes;
+
+      completedCount += weight;
+      episodesWatched += (anime.episodes ?? 0) * weight;
+      totalMinutes += minutes * weight;
+      titles.push(getDisplayTitle(anime));
+    }
+
+    return {
+      name: member.name,
+      completedCount: Math.round(completedCount * 10) / 10,
+      episodesWatched: Math.round(episodesWatched),
+      totalHours: Math.round((totalMinutes / 60) * 10) / 10,
+      titles,
+    };
+  });
+
+  recapMembers.sort((a, b) => b.completedCount - a.completedCount);
+
+  const favoriteCandidates = animeList
+    .filter((anime) =>
+      members.some((member) => {
+        const status = getMemberStatus(anime.memberStatuses, member.name);
+        if (!FINISHED_STATUSES.includes(status)) return false;
+        return isInMonth(
+          getMemberStatusUpdatedAt(anime.memberStatuses, member.name),
+          year,
+          month,
+        );
+      }),
+    )
+    .map((anime) => {
+      const { average, count } = getAverageRating(anime.ratings);
+      const finishers = members.filter((member) => {
+        const status = getMemberStatus(anime.memberStatuses, member.name);
+        if (!FINISHED_STATUSES.includes(status)) return false;
+        return isInMonth(
+          getMemberStatusUpdatedAt(anime.memberStatuses, member.name),
+          year,
+          month,
+        );
+      }).length;
+      return { title: getDisplayTitle(anime), average, count, finishers };
+    })
+    .sort(
+      (a, b) =>
+        b.average - a.average ||
+        b.count - a.count ||
+        b.finishers - a.finishers,
+    );
+
+  const favorite = favoriteCandidates[0]
+    ? {
+        title: favoriteCandidates[0].title,
+        average: favoriteCandidates[0].average,
+        count: favoriteCandidates[0].count,
+      }
+    : null;
+
+  const totalCompleted =
+    Math.round(
+      recapMembers.reduce((sum, member) => sum + member.completedCount, 0) * 10,
+    ) / 10;
+  const totalHours =
+    Math.round(
+      recapMembers.reduce((sum, member) => sum + member.totalHours, 0) * 10,
+    ) / 10;
+
+  const topMember =
+    recapMembers.find((member) => member.completedCount > 0) ?? null;
+
+  const label = new Intl.DateTimeFormat("de-DE", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(year, month, 1));
+
+  return {
+    year,
+    month,
+    label,
+    totalCompleted,
+    totalHours,
+    members: recapMembers,
+    topMember,
+    favorite,
+  };
+}
+
 export function getTopGenreLeader(
   stats: MemberLeaderboardStats[],
   genre: string,

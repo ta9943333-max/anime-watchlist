@@ -224,28 +224,15 @@ export function Leaderboard({
             periodRanking.map((member, index) => {
               const bucket = member.byPeriod[period];
               return (
-                <div key={member.name} className="space-y-2">
-                  <StatRow
-                    rank={index + 1}
-                    member={member}
-                    primary={`${bucket.completedCount} series`}
-                    secondary={`${bucket.episodesWatched} eps · ${bucket.totalHours}h · ${LEADERBOARD_PERIOD_LABELS[period]}`}
-                    highlight={member.name === currentUser}
-                    onClick={() => onOpenProfile(member.name)}
-                  />
-                  {period !== "all" && bucket.titles.length > 0 && (
-                    <ul className="ml-11 space-y-1 border-l border-slate-800 pl-3">
-                      {bucket.titles.map((title) => (
-                        <li
-                          key={`${member.name}-${title}`}
-                          className="truncate text-xs text-slate-500"
-                        >
-                          {title}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
+                <StatRow
+                  key={member.name}
+                  rank={index + 1}
+                  member={member}
+                  primary={`${bucket.completedCount} series`}
+                  secondary={`${bucket.episodesWatched} eps · ${bucket.totalHours}h · ${LEADERBOARD_PERIOD_LABELS[period]}`}
+                  highlight={member.name === currentUser}
+                  onClick={() => onOpenProfile(member.name)}
+                />
               );
             })
           )}

@@ -30,3 +30,47 @@ export function clearCurrentUser(): void {
   if (typeof window === "undefined") return;
   localStorage.removeItem(USER_KEY);
 }
+
+const RECAP_SEEN_KEY = "anime-watchlist-recap-seen";
+
+/**
+ * Welchen Monat sollen wir am Monatsende/-anfang zusammenfassen?
+ * - Letzte 3 Tage des Monats → aktueller Monat
+ * - Erste 5 Tage des Monats → Vormonat
+ * Sonst null (kein automatischer Rückblick).
+ */
+export function getRecapMonthToShow(
+  now = new Date(),
+): { year: number; month: number } | null {
+  const day = now.getDate();
+  const daysInMonth = new Date(
+    now.getFullYear(),
+    now.getMonth() + 1,
+    0,
+  ).getDate();
+
+  if (day >= daysInMonth - 2) {
+    return { year: now.getFullYear(), month: now.getMonth() };
+  }
+
+  if (day <= 5) {
+    const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    return { year: prev.getFullYear(), month: prev.getMonth() };
+  }
+
+  return null;
+}
+
+function recapKey(year: number, month: number): string {
+  return `${year}-${String(month + 1).padStart(2, "0")}`;
+}
+
+export function hasSeenRecap(year: number, month: number): boolean {
+  if (typeof window === "undefined") return true;
+  return localStorage.getItem(RECAP_SEEN_KEY) === recapKey(year, month);
+}
+
+export function markRecapSeen(year: number, month: number): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(RECAP_SEEN_KEY, recapKey(year, month));
+}

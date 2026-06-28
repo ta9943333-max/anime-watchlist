@@ -395,8 +395,25 @@ async function enrichItems(items: DiscoverItem[]): Promise<DiscoverItem[]> {
   return hydrateDiscoverImages(enriched);
 }
 
-function viewUsesCatalog(activeView: DiscoverView): boolean {
-  return activeView === "all" || activeView === "airing";
+function getCurrentSeason(now = new Date()): { season: string; year: number } {
+  const month = now.getMonth();
+  const season =
+    month <= 2 ? "Winter" : month <= 5 ? "Spring" : month <= 8 ? "Summer" : "Fall";
+  return { season, year: now.getFullYear() };
+}
+
+function viewUsesCatalog(
+  activeView: DiscoverView,
+  activePickMode: PickMode,
+): boolean {
+  if (
+    activeView === "all" ||
+    activeView === "airing" ||
+    activeView === "upcoming"
+  ) {
+    return true;
+  }
+  return activeView === "pick" && activePickMode !== "lucky";
 }
 
 export function MalDiscover({
@@ -456,6 +473,20 @@ export function MalDiscover({
       items = items.filter((item) =>
         isCurrentlyAiring(releaseFieldsFromAnime(item)),
       );
+    } else if (view === "upcoming") {
+      items = items.filter((item) =>
+        isTrulyUpcoming(releaseFieldsFromAnime(item)),
+      );
+    } else if (view === "pick" && pickMode === "season") {
+      const { season, year } = getCurrentSeason();
+      items = items.filter(
+        (item) =>
+          item.malYear === year &&
+          (item.malSeason ?? "").toLowerCase() === season.toLowerCase(),
+      );
+    } else if (view === "pick" && pickMode === "year") {
+      const { year } = getCurrentSeason();
+      items = items.filter((item) => item.malYear === year);
     }
     return attachWatchlistMeta(
       items,
@@ -463,7 +494,7 @@ export function MalDiscover({
       currentUser,
       discoverStatuses,
     );
-  }, [catalog.items, view, animeList, currentUser, discoverStatuses]);
+  }, [catalog.items, view, pickMode, animeList, currentUser, discoverStatuses]);
 
   const hasListFilters = Boolean(
     genreFilter ||
@@ -472,7 +503,7 @@ export function MalDiscover({
   );
 
   const filteredBeforePage = useMemo(() => {
-    let list = viewUsesCatalog(view) ? catalogWithMeta : apiResults;
+    let list = viewUsesCatalog(view, pickMode) ? catalogWithMeta : apiResults;
 
     if (genreFilter) {
       list = list.filter((result) =>
@@ -493,7 +524,7 @@ export function MalDiscover({
       );
     }
 
-    if (view === "airing") {
+    if (view === "airing" || view === "upcoming") {
       return sortByCountdown(list);
     }
 
@@ -513,7 +544,7 @@ export function MalDiscover({
   ]);
 
   const listPagination = useMemo(() => {
-    if (!viewUsesCatalog(view)) return null;
+    if (!viewUsesCatalog(view, pickMode)) return null;
 
     const filteredCount = filteredBeforePage.length;
     const catalogTotal = catalog.totalItems ?? catalog.items.length;
@@ -521,15 +552,23 @@ export function MalDiscover({
       view === "all" && !hasListFilters ? catalogTotal : filteredCount;
     const lastPage = Math.max(1, Math.ceil(itemTotal / CATALOG_PAGE_SIZE));
 
+    const suffix =
+      view === "all"
+        ? "anime in catalog"
+        : view === "airing"
+          ? "currently airing"
+          : view === "upcoming"
+            ? "upcoming"
+            : "anime";
+    const labelTotal = view === "all" ? catalogTotal : filteredCount;
+
     return {
       lastPage,
-      totalLabel:
-        view === "all"
-          ? `${catalogTotal.toLocaleString()} anime in catalog`
-          : `${filteredCount.toLocaleString()} currently airing`,
+      totalLabel: `${labelTotal.toLocaleString()} ${suffix}`,
     };
   }, [
     view,
+    pickMode,
     filteredBeforePage.length,
     catalog.totalItems,
     catalog.items.length,
@@ -537,7 +576,7 @@ export function MalDiscover({
   ]);
 
   const pageAwaitingData = useMemo(() => {
-    if (!viewUsesCatalog(view) || catalog.status === "ready") return false;
+    if (view !== "all" || catalog.status === "ready") return false;
     if (hasListFilters) return false;
     const required = catalogPage * CATALOG_PAGE_SIZE;
     return catalog.items.length < required;
@@ -578,7 +617,7 @@ export function MalDiscover({
   }, [view, pickMode, catalog.items.length, luckyPick, rollLucky]);
 
   useEffect(() => {
-    if (viewUsesCatalog(view)) return;
+    if (viewUsesCatalog(view, pickMode)) return;
 
     const activeView = view;
     const activePickMode = pickMode;
@@ -684,17 +723,19 @@ export function MalDiscover({
   }, [view, pickMode, debouncedQuery]);
 
   useEffect(() => {
-    if (!viewUsesCatalog(view)) return;
+    if (!viewUsesCatalog(view, pickMode)) return;
     setIsLoading(catalog.items.length === 0 && catalog.status === "loading");
-  }, [view, catalog.items.length, catalog.status]);
+  }, [view, pickMode, catalog.items.length, catalog.status]);
 
   useEffect(() => {
-    if (viewUsesCatalog(view)) {
+    if (viewUsesCatalog(view, pickMode)) {
       sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
-  }, [catalogPage, view]);
+  }, [catalogPage, view, pickMode]);
 
-  const sourceResults = viewUsesCatalog(view) ? catalogWithMeta : apiResults;
+  const sourceResults = viewUsesCatalog(view, pickMode)
+    ? catalogWithMeta
+    : apiResults;
 
   const genres = useMemo(() => {
     const set = new Set<string>();
@@ -707,22 +748,22 @@ export function MalDiscover({
   }, [sourceResults]);
 
   const filteredResults = useMemo(() => {
-    if (viewUsesCatalog(view)) {
+    if (viewUsesCatalog(view, pickMode)) {
       return paginateList(filteredBeforePage, catalogPage, CATALOG_PAGE_SIZE);
     }
     return filteredBeforePage;
-  }, [filteredBeforePage, view, catalogPage]);
+  }, [filteredBeforePage, view, pickMode, catalogPage]);
 
   const catalogIsLoading =
     catalog.status === "loading" || catalog.status === "idle";
   const showLucky = view === "pick" && pickMode === "lucky";
   const showCatalogProgress =
-    catalogIsLoading && (viewUsesCatalog(view) || showLucky);
-  const listIsLoading = viewUsesCatalog(view)
+    catalogIsLoading && (viewUsesCatalog(view, pickMode) || showLucky);
+  const listIsLoading = viewUsesCatalog(view, pickMode)
     ? (catalog.items.length === 0 && catalogIsLoading) || pageAwaitingData
     : isLoading && resultState.items.length === 0 && !showLucky;
   const showListPagination =
-    viewUsesCatalog(view) &&
+    viewUsesCatalog(view, pickMode) &&
     listPagination != null &&
     (catalog.totalItems != null || catalog.items.length > 0);
 
@@ -786,7 +827,7 @@ export function MalDiscover({
         anime={result}
         alreadyAdded={Boolean(inList ?? result.watchlistId)}
         isAdding={addingId === (result.malId || result.anilistId)}
-        allowPersonalStatus={view === "search" || view === "all"}
+        allowPersonalStatus={!showLucky}
         onAdd={() => void handleAdd(result)}
         onSetMyStatus={onSetMyStatus}
         onSetEpisodesWatched={onSetEpisodesWatched}
@@ -829,7 +870,7 @@ export function MalDiscover({
                 setIsLoading(true);
                 setGenreFilter(null);
                 setStatusFilter("all");
-                if (key === "all" || key === "airing") setCatalogPage(1);
+                setCatalogPage(1);
                 if (key !== "search") setSearchQuery("");
               }}
               className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
@@ -858,6 +899,7 @@ export function MalDiscover({
                 onClick={() => {
                   setPickMode(mode);
                   setResultState({ view: "pick", items: [] });
+                  setCatalogPage(1);
                   if (mode === "lucky") setLuckyPick(null);
                   if (mode !== "lucky") setIsLoading(true);
                 }}
@@ -984,7 +1026,7 @@ export function MalDiscover({
       )}
 
       {catalog.status === "error" &&
-        (viewUsesCatalog(view) || showLucky) && (
+        (viewUsesCatalog(view, pickMode) || showLucky) && (
           <p className="rounded-xl border border-red-500/30 bg-red-950/30 px-4 py-3 text-sm text-red-200">
             AniList catalog failed: {catalog.error}
           </p>
