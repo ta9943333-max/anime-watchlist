@@ -9,16 +9,28 @@ export type AnimeReleaseFields = {
   nextEpisode?: number | null;
   timeUntilAiring?: number | null;
   airingAt?: number | null;
+  anilistStatus?: string | null;
 };
+
+export const NO_RELEASE_DATA = "No data yet";
 
 const BERLIN_TZ = "Europe/Berlin";
 const JST_TZ = "Asia/Tokyo";
+const SEASON_START_MONTHS: Record<string, number> = {
+  winter: 1,
+  spring: 4,
+  summer: 7,
+  fall: 10,
+};
 
 function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-function formatSeasonLabel(season: string | null, year: number | null): string | null {
+function formatSeasonLabel(
+  season: string | null,
+  year: number | null,
+): string | null {
   if (!season && !year) return null;
   if (season && year) return `${capitalize(season)} ${year}`;
   if (year) return String(year);
@@ -54,6 +66,52 @@ function parseBroadcastDateTime(
   return new Date(jstIso);
 }
 
+export function isPlaceholderPremiereDate(
+  airedFrom: string,
+  malSeason: string | null,
+  malYear: number | null,
+): boolean {
+  const date = new Date(airedFrom);
+  if (Number.isNaN(date.getTime())) return true;
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: JST_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const year = Number(parts.find((part) => part.type === "year")?.value);
+  const month = Number(parts.find((part) => part.type === "month")?.value);
+  const day = Number(parts.find((part) => part.type === "day")?.value);
+
+  if (day !== 1) return false;
+
+  if (malSeason && malYear && year === malYear) {
+    const seasonMonth = SEASON_START_MONTHS[malSeason.toLowerCase()];
+    if (seasonMonth === month) return true;
+  }
+
+  return Object.values(SEASON_START_MONTHS).includes(month);
+}
+
+export function getConfirmedPremiereDate(
+  info: AnimeReleaseFields,
+): Date | null {
+  if (!info.airedFrom) return null;
+  if (
+    isPlaceholderPremiereDate(
+      info.airedFrom,
+      info.malSeason,
+      info.malYear,
+    )
+  ) {
+    return null;
+  }
+
+  return parseBroadcastDateTime(info.airedFrom, info.broadcastTime);
+}
+
 export function formatPremiereDateTime(date: Date): string {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: BERLIN_TZ,
@@ -76,30 +134,7 @@ export function formatShortDate(date: Date): string {
 }
 
 export function getPremiereDate(info: AnimeReleaseFields): Date | null {
-  if (info.airedFrom) {
-    return parseBroadcastDateTime(info.airedFrom, info.broadcastTime);
-  }
-  return getEstimatedSeasonStart(info.malSeason, info.malYear);
-}
-
-export function getEstimatedSeasonStart(
-  season: string | null,
-  year: number | null,
-): Date | null {
-  if (!season || !year) return null;
-
-  const months: Record<string, number> = {
-    winter: 1,
-    spring: 4,
-    summer: 7,
-    fall: 10,
-  };
-  const month = months[season.toLowerCase()];
-  if (!month) return null;
-
-  return new Date(
-    `${year}-${String(month).padStart(2, "0")}-01T00:00:00+09:00`,
-  );
+  return getConfirmedPremiereDate(info);
 }
 
 function normalizeDayName(day: string): string {
@@ -145,54 +180,95 @@ export function getNextBroadcastDate(
   return null;
 }
 
+export function isCurrentlyAiring(info: AnimeReleaseFields): boolean {
+  if (info.malStatus === "Currently Airing") return true;
+  if (info.anilistStatus === "RELEASING") return true;
+  if (info.nextEpisode != null && info.nextEpisode > 1) return true;
+  return false;
+}
+
+export function isTrulyUpcoming(info: AnimeReleaseFields): boolean {
+  if (isCurrentlyAiring(info)) return false;
+  if (info.malStatus === "Finished Airing") return false;
+  if (info.anilistStatus === "FINISHED") return false;
+  if (info.anilistStatus === "RELEASING") return false;
+
+  return (
+    info.malStatus === "Not yet aired" ||
+    info.anilistStatus === "NOT_YET_RELEASED" ||
+    info.anilistStatus == null
+  );
+}
+
 export function getCountdownTarget(
   info: AnimeReleaseFields,
   now = new Date(),
 ): { date: Date; label: string } | null {
+  if (isCurrentlyAiring(info)) {
+    if (
+      info.nextEpisode &&
+      info.timeUntilAiring != null &&
+      info.timeUntilAiring > 0
+    ) {
+      return {
+        date: new Date(now.getTime() + info.timeUntilAiring * 1000),
+        label: `EP${info.nextEpisode} · TV (JP)`,
+      };
+    }
+
+    if (
+      info.nextEpisode &&
+      info.airingAt &&
+      info.airingAt * 1000 > now.getTime()
+    ) {
+      return {
+        date: new Date(info.airingAt * 1000),
+        label: `EP${info.nextEpisode} · TV (JP)`,
+      };
+    }
+
+    const nextBroadcast = getNextBroadcastDate(info, now);
+    if (nextBroadcast) {
+      return { date: nextBroadcast, label: "Next ep · TV (JP)" };
+    }
+
+    return null;
+  }
+
   if (
-    info.nextEpisode &&
+    info.nextEpisode === 1 &&
     info.timeUntilAiring != null &&
     info.timeUntilAiring > 0
   ) {
     return {
       date: new Date(now.getTime() + info.timeUntilAiring * 1000),
-      label: `EP${info.nextEpisode} · TV (JP)`,
+      label: "Premiere · TV (JP)",
     };
   }
 
-  if (info.nextEpisode && info.airingAt && info.airingAt * 1000 > now.getTime()) {
+  if (
+    info.nextEpisode === 1 &&
+    info.airingAt &&
+    info.airingAt * 1000 > now.getTime()
+  ) {
     return {
       date: new Date(info.airingAt * 1000),
-      label: `EP${info.nextEpisode} · TV (JP)`,
+      label: "Premiere · TV (JP)",
     };
   }
 
-  if (info.malStatus === "Currently Airing") {
-    const nextBroadcast = getNextBroadcastDate(info, now);
-    if (nextBroadcast) {
-      return { date: nextBroadcast, label: "Next ep · TV (JP)" };
-    }
-  }
-
-  const premiere = info.airedFrom
-    ? parseBroadcastDateTime(info.airedFrom, info.broadcastTime)
-    : null;
-
+  const premiere = getConfirmedPremiereDate(info);
   if (premiere && premiere > now) {
     return { date: premiere, label: "Premiere · TV (JP)" };
-  }
-
-  if (info.malStatus === "Not yet aired") {
-    const estimated = getEstimatedSeasonStart(info.malSeason, info.malYear);
-    if (estimated && estimated > now) {
-      return { date: estimated, label: "Est. premiere" };
-    }
   }
 
   return null;
 }
 
-export function getCountdownParts(target: Date, now = new Date()): {
+export function getCountdownParts(
+  target: Date,
+  now = new Date(),
+): {
   days: number;
   hours: number;
   minutes: number;
@@ -223,22 +299,21 @@ export function formatCountdown(target: Date, now = new Date()): string | null {
   return `${parts.minutes}m ${parts.seconds}s`;
 }
 
-export function formatAnimeRelease(info: AnimeReleaseFields): string | null {
-  const premiere = getPremiereDate(info);
-  const seasonLabel = formatSeasonLabel(info.malSeason, info.malYear);
+export function formatAnimeRelease(info: AnimeReleaseFields): string {
   const now = new Date();
+  const seasonLabel = formatSeasonLabel(info.malSeason, info.malYear);
+  const premiere = getConfirmedPremiereDate(info);
 
-  if (
-    info.malStatus === "Currently Airing" &&
-    premiere &&
-    premiere <= now &&
-    seasonLabel
-  ) {
-    const schedule =
-      info.broadcastDay && info.broadcastTime
-        ? ` · ${info.broadcastDay}s ${info.broadcastTime} JST`
-        : "";
-    return `Began ${seasonLabel}${schedule}`;
+  if (isCurrentlyAiring(info)) {
+    if (premiere && premiere <= now && seasonLabel) {
+      const schedule =
+        info.broadcastDay && info.broadcastTime
+          ? ` · ${info.broadcastDay}s ${info.broadcastTime} JST`
+          : "";
+      return `Began ${seasonLabel}${schedule}`;
+    }
+    if (seasonLabel) return `Airing · ${seasonLabel}`;
+    return "Currently airing";
   }
 
   if (premiere && premiere > now) {
@@ -256,19 +331,11 @@ export function formatAnimeRelease(info: AnimeReleaseFields): string | null {
     return formatPremiereDateTime(premiere);
   }
 
-  if (seasonLabel && info.malStatus === "Not yet aired") {
-    return `Expected ${seasonLabel}`;
-  }
-
-  if (seasonLabel) {
-    return seasonLabel;
-  }
-
-  return null;
+  return NO_RELEASE_DATA;
 }
 
 export function isUpcomingRelease(info: AnimeReleaseFields): boolean {
-  const premiere = getPremiereDate(info);
+  const premiere = getConfirmedPremiereDate(info);
   if (premiere && premiere > new Date()) return true;
-  return info.malStatus === "Not yet aired";
+  return isTrulyUpcoming(info);
 }

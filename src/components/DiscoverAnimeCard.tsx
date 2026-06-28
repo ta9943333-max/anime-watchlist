@@ -8,6 +8,7 @@ import {
   formatAnimeRelease,
   formatCountdown,
   getCountdownTarget,
+  NO_RELEASE_DATA,
 } from "@/lib/mal/release-date";
 import { STATUS_OPTIONS, type AnimeStatus } from "@/lib/statuses";
 import type { DiscoverItem } from "@/lib/mal/jikan";
@@ -115,7 +116,15 @@ export function DiscoverAnimeCard({
             )}
 
             {releaseLabel && (
-              <p className="font-medium text-slate-200">{releaseLabel}</p>
+              <p
+                className={`font-medium ${
+                  releaseLabel === NO_RELEASE_DATA
+                    ? "text-slate-500 italic"
+                    : "text-slate-200"
+                }`}
+              >
+                {releaseLabel}
+              </p>
             )}
 
             <p className="text-slate-400">{formatEpisodeLine(anime)}</p>

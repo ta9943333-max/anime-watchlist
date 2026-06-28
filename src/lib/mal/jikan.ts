@@ -1,3 +1,5 @@
+import type { AnimeStatus } from "@/lib/statuses";
+
 export type MalSearchResult = {
   malId: number;
   title: string;
@@ -23,8 +25,6 @@ export type MalSearchResult = {
   airingAt?: number | null;
   anilistStatus?: string | null;
 };
-
-import type { AnimeStatus } from "@/lib/statuses";
 
 export type DiscoverItem = MalSearchResult & {
   watchlistId?: string;

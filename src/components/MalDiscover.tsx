@@ -23,7 +23,7 @@ import {
   searchMalAnime,
   type DiscoverItem,
 } from "@/lib/mal/jikan";
-import { getCountdownTarget } from "@/lib/mal/release-date";
+import { getCountdownTarget, isCurrentlyAiring, isTrulyUpcoming } from "@/lib/mal/release-date";
 import { getDisplayTitle, type AnimeEntry } from "@/lib/types";
 import {
   STATUS_OPTIONS,
@@ -189,11 +189,14 @@ export function MalDiscover({
         items = await enrichItems(items);
 
         if (view === "airing") {
-          items = items.filter(
-            (item) =>
-              item.malStatus === "Currently Airing" ||
-              item.anilistStatus === "RELEASING" ||
-              item.nextEpisode != null,
+          items = items.filter((item) =>
+            isCurrentlyAiring(releaseFieldsFromAnime(item)),
+          );
+        }
+
+        if (view === "upcoming") {
+          items = items.filter((item) =>
+            isTrulyUpcoming(releaseFieldsFromAnime(item)),
           );
         }
 
