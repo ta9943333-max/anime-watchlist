@@ -5,6 +5,8 @@ import {
   CalendarClock,
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   Clapperboard,
   Dices,
   Globe2,
@@ -32,7 +34,6 @@ import {
   hydrateDiscoverImages,
   searchMalAnime,
   type DiscoverItem,
-  type MalPagination,
 } from "@/lib/mal/jikan";
 import {
   getCountdownTarget,
@@ -185,56 +186,131 @@ function CatalogProgress({
 }
 
 function BrowsePagination({
-  pagination,
   page,
+  lastPage,
+  totalLabel,
   isLoading,
+  jumpInputId = "catalog-page-jump",
   onPageChange,
 }: {
-  pagination: MalPagination;
   page: number;
+  lastPage: number;
+  totalLabel?: string;
   isLoading: boolean;
+  jumpInputId?: string;
   onPageChange: (page: number) => void;
 }) {
+  const [jumpValue, setJumpValue] = useState(String(page));
+
+  useEffect(() => {
+    setJumpValue(String(page));
+  }, [page]);
+
+  function goToPage(next: number) {
+    onPageChange(Math.min(lastPage, Math.max(1, next)));
+  }
+
+  function applyJump() {
+    const parsed = Number.parseInt(jumpValue, 10);
+    if (!Number.isNaN(parsed)) {
+      goToPage(parsed);
+    } else {
+      setJumpValue(String(page));
+    }
+  }
+
   const canPrev = page > 1;
-  const canNext = pagination.hasNextPage;
+  const canNext = page < lastPage;
 
   return (
-    <div className="flex flex-col items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3 sm:flex-row">
-      <button
-        type="button"
-        disabled={!canPrev || isLoading}
-        onClick={() => onPageChange(page - 1)}
-        className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        Previous
-      </button>
+    <nav
+      aria-label="Catalog pagination"
+      className="flex flex-col items-stretch gap-4 rounded-xl border border-slate-700/80 bg-slate-900/60 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <div className="flex items-center justify-center gap-1 sm:justify-start">
+        <button
+          type="button"
+          aria-label="First page"
+          disabled={!canPrev || isLoading}
+          onClick={() => goToPage(1)}
+          className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-700 text-slate-300 transition hover:border-slate-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <ChevronsLeft className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          aria-label="Previous page"
+          disabled={!canPrev || isLoading}
+          onClick={() => goToPage(page - 1)}
+          className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-700 text-slate-300 transition hover:border-slate-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+      </div>
 
-      <p className="text-center text-sm text-slate-400">
-        Page{" "}
-        <span className="font-semibold text-white">{pagination.currentPage}</span>{" "}
-        of{" "}
-        <span className="font-semibold text-white">
-          {pagination.lastVisiblePage.toLocaleString()}
-        </span>
-        <span className="mx-2 text-slate-600">·</span>
-        <span className="font-semibold text-sky-300">
-          {pagination.total.toLocaleString()}
-        </span>{" "}
-        anime in catalog
-      </p>
+      <div className="flex flex-col items-center gap-2 text-center">
+        <p className="text-xl font-bold tracking-tight text-white">
+          Page {page.toLocaleString()}{" "}
+          <span className="text-base font-normal text-slate-500">of</span>{" "}
+          {lastPage.toLocaleString()}
+        </p>
+        {totalLabel && (
+          <p className="text-xs text-slate-500">{totalLabel}</p>
+        )}
+        <div className="flex items-center gap-2">
+          <label htmlFor={jumpInputId} className="text-xs text-slate-500">
+            Go to page
+          </label>
+          <input
+            id={jumpInputId}
+            type="number"
+            min={1}
+            max={lastPage}
+            value={jumpValue}
+            onChange={(event) => setJumpValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") applyJump();
+            }}
+            className="w-20 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-center text-sm text-white outline-none focus:border-sky-500/60"
+          />
+          <button
+            type="button"
+            onClick={applyJump}
+            disabled={isLoading}
+            className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white disabled:opacity-40"
+          >
+            Go
+          </button>
+        </div>
+      </div>
 
-      <button
-        type="button"
-        disabled={!canNext || isLoading}
-        onClick={() => onPageChange(page + 1)}
-        className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        Next
-        <ChevronRight className="h-4 w-4" />
-      </button>
-    </div>
+      <div className="flex items-center justify-center gap-1 sm:justify-end">
+        <button
+          type="button"
+          aria-label="Next page"
+          disabled={!canNext || isLoading}
+          onClick={() => goToPage(page + 1)}
+          className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-700 text-slate-300 transition hover:border-slate-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          aria-label="Last page"
+          disabled={!canNext || isLoading}
+          onClick={() => goToPage(lastPage)}
+          className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-700 text-slate-300 transition hover:border-slate-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <ChevronsRight className="h-4 w-4" />
+        </button>
+      </div>
+    </nav>
   );
+}
+
+function paginateList<T>(items: T[], page: number, pageSize: number): T[] {
+  const start = (page - 1) * pageSize;
+  return items.slice(start, start + pageSize);
 }
 
 function sortByCountdown(items: DiscoverItem[]): DiscoverItem[] {
@@ -314,7 +390,7 @@ export function MalDiscover({
   const [view, setView] = useState<DiscoverView>("pick");
   const [pickMode, setPickMode] = useState<PickMode>("season");
   const [luckyPick, setLuckyPick] = useState<DiscoverItem | null>(null);
-  const [allPage, setAllPage] = useState(1);
+  const [catalogPage, setCatalogPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [resultState, setResultState] = useState<ResultState>({
@@ -349,25 +425,89 @@ export function MalDiscover({
     return attachWatchlistMeta(items, animeList, currentUser);
   }, [catalog.items, view, animeList, currentUser]);
 
-  const catalogPagination = useMemo((): MalPagination | null => {
-    if (view !== "all" || catalogWithMeta.length === 0) return null;
-    const total = catalog.totalItems ?? catalogWithMeta.length;
-    const lastPage = Math.max(
-      1,
-      Math.ceil(catalogWithMeta.length / CATALOG_PAGE_SIZE),
-    );
+  const hasListFilters = Boolean(
+    genreFilter ||
+      statusFilter !== "all" ||
+      (searchQuery.trim() && view !== "search"),
+  );
+
+  const filteredBeforePage = useMemo(() => {
+    let list = viewUsesCatalog(view) ? catalogWithMeta : apiResults;
+
+    if (genreFilter) {
+      list = list.filter((result) =>
+        result.genres.some(
+          (genre) => genre.toLowerCase() === genreFilter.toLowerCase(),
+        ),
+      );
+    }
+
+    if (statusFilter !== "all") {
+      list = list.filter((result) => result.myStatus === statusFilter);
+    }
+
+    const query = searchQuery.trim().toLowerCase();
+    if (query && view !== "search") {
+      list = list.filter((result) =>
+        result.title.toLowerCase().includes(query),
+      );
+    }
+
+    if (view === "airing") {
+      return sortByCountdown(list);
+    }
+
+    if (view === "pick" && pickMode !== "lucky") {
+      return sortByScore(list);
+    }
+
+    return list;
+  }, [
+    catalogWithMeta,
+    apiResults,
+    view,
+    pickMode,
+    genreFilter,
+    statusFilter,
+    searchQuery,
+  ]);
+
+  const listPagination = useMemo(() => {
+    if (!viewUsesCatalog(view)) return null;
+
+    const filteredCount = filteredBeforePage.length;
+    const catalogTotal = catalog.totalItems ?? catalog.items.length;
+    const itemTotal =
+      view === "all" && !hasListFilters ? catalogTotal : filteredCount;
+    const lastPage = Math.max(1, Math.ceil(itemTotal / CATALOG_PAGE_SIZE));
+
     return {
-      currentPage: allPage,
-      lastVisiblePage: lastPage,
-      hasNextPage: allPage < lastPage,
-      total,
-      perPage: CATALOG_PAGE_SIZE,
-      count: Math.min(
-        CATALOG_PAGE_SIZE,
-        catalogWithMeta.length - (allPage - 1) * CATALOG_PAGE_SIZE,
-      ),
+      lastPage,
+      totalLabel:
+        view === "all"
+          ? `${catalogTotal.toLocaleString()} anime in catalog`
+          : `${filteredCount.toLocaleString()} currently airing`,
     };
-  }, [view, catalogWithMeta.length, catalog.totalItems, allPage]);
+  }, [
+    view,
+    filteredBeforePage.length,
+    catalog.totalItems,
+    catalog.items.length,
+    hasListFilters,
+  ]);
+
+  const pageAwaitingData = useMemo(() => {
+    if (!viewUsesCatalog(view) || catalog.status === "ready") return false;
+    if (hasListFilters) return false;
+    const required = catalogPage * CATALOG_PAGE_SIZE;
+    return catalog.items.length < required;
+  }, [
+    view,
+    catalog.status,
+    catalog.items.length,
+    catalogPage,
+    hasListFilters,
+  ]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 350);
@@ -499,10 +639,10 @@ export function MalDiscover({
   }, [view, catalog.items.length, catalog.status]);
 
   useEffect(() => {
-    if (view === "all") {
+    if (viewUsesCatalog(view)) {
       sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
-  }, [allPage, view]);
+  }, [catalogPage, view]);
 
   const sourceResults = viewUsesCatalog(view) ? catalogWithMeta : apiResults;
 
@@ -517,50 +657,11 @@ export function MalDiscover({
   }, [sourceResults]);
 
   const filteredResults = useMemo(() => {
-    let list = sourceResults;
-
-    if (genreFilter) {
-      list = list.filter((result) =>
-        result.genres.some(
-          (genre) => genre.toLowerCase() === genreFilter.toLowerCase(),
-        ),
-      );
+    if (viewUsesCatalog(view)) {
+      return paginateList(filteredBeforePage, catalogPage, CATALOG_PAGE_SIZE);
     }
-
-    if (statusFilter !== "all") {
-      list = list.filter((result) => result.myStatus === statusFilter);
-    }
-
-    const query = searchQuery.trim().toLowerCase();
-    if (query && view !== "search") {
-      list = list.filter((result) =>
-        result.title.toLowerCase().includes(query),
-      );
-    }
-
-    if (view === "pick" && pickMode !== "lucky") {
-      return sortByScore(list);
-    }
-
-    if (view === "all") {
-      const start = (allPage - 1) * CATALOG_PAGE_SIZE;
-      return list.slice(start, start + CATALOG_PAGE_SIZE);
-    }
-
-    if (view === "airing") {
-      return sortByCountdown(list);
-    }
-
-    return sortByCountdown(list);
-  }, [
-    sourceResults,
-    genreFilter,
-    statusFilter,
-    searchQuery,
-    view,
-    pickMode,
-    allPage,
-  ]);
+    return filteredBeforePage;
+  }, [filteredBeforePage, view, catalogPage]);
 
   const catalogIsLoading =
     catalog.status === "loading" || catalog.status === "idle";
@@ -568,8 +669,18 @@ export function MalDiscover({
   const showCatalogProgress =
     catalogIsLoading && (viewUsesCatalog(view) || showLucky);
   const listIsLoading = viewUsesCatalog(view)
-    ? catalog.items.length === 0 && catalogIsLoading
+    ? (catalog.items.length === 0 && catalogIsLoading) || pageAwaitingData
     : isLoading && !showLucky;
+  const showListPagination =
+    viewUsesCatalog(view) &&
+    listPagination != null &&
+    (catalog.totalItems != null || catalog.items.length > 0);
+
+  useEffect(() => {
+    if (listPagination && catalogPage > listPagination.lastPage) {
+      setCatalogPage(listPagination.lastPage);
+    }
+  }, [listPagination, catalogPage]);
 
   async function handleAdd(item: DiscoverItem) {
     setAddingId(item.malId || item.anilistId || null);
@@ -648,7 +759,7 @@ export function MalDiscover({
                 setIsLoading(true);
                 setGenreFilter(null);
                 setStatusFilter("all");
-                if (key === "all") setAllPage(1);
+                if (key === "all" || key === "airing") setCatalogPage(1);
                 if (key !== "search") setSearchQuery("");
               }}
               className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
@@ -818,27 +929,34 @@ export function MalDiscover({
 
       {!showLucky && (
         <p className="text-xs uppercase tracking-wide text-slate-500">
-          {view === "all" && catalogPagination
-            ? `${catalogPagination.total.toLocaleString()} anime in catalog · showing ${filteredResults.length} on this page`
-            : view === "airing" && catalog.totalItems
-              ? `${filteredResults.length} airing · ${catalog.items.length.toLocaleString()} loaded`
-              : `${filteredResults.length} titles`}
+          {showListPagination && listPagination
+            ? `${listPagination.totalLabel} · ${filteredResults.length} on this page`
+            : `${filteredBeforePage.length} titles`}
         </p>
       )}
 
-      {view === "all" && catalogPagination && !listIsLoading && (
+      {showListPagination && listPagination && !listIsLoading && (
         <BrowsePagination
-          pagination={catalogPagination}
-          page={allPage}
+          page={catalogPage}
+          lastPage={listPagination.lastPage}
+          totalLabel={listPagination.totalLabel}
           isLoading={listIsLoading}
-          onPageChange={setAllPage}
+          jumpInputId="catalog-page-jump-top"
+          onPageChange={setCatalogPage}
         />
       )}
 
       {listIsLoading ? (
-        <div className="flex items-center justify-center gap-3 py-24 text-slate-400">
+        <div className="flex flex-col items-center justify-center gap-3 py-24 text-slate-400">
           <Loader2 className="h-6 w-6 animate-spin" />
-          Loading…
+          {pageAwaitingData ? (
+            <p className="text-sm">
+              Loading page {catalogPage}… ({catalog.items.length.toLocaleString()}{" "}
+              anime cached so far)
+            </p>
+          ) : (
+            <p>Loading…</p>
+          )}
         </div>
       ) : showLucky ? (
         catalog.items.length === 0 && catalogIsLoading ? (
@@ -876,19 +994,21 @@ export function MalDiscover({
             Could not load anime for a random pick. Try again.
           </p>
         )
-      ) : filteredResults.length === 0 ? (
+      ) : filteredResults.length === 0 && !pageAwaitingData ? (
         <p className="py-24 text-center text-slate-500">
           No anime found for this filter.
         </p>
       ) : (
         <div className="flex flex-col gap-8">
           {filteredResults.map((result) => renderDiscoverCard(result))}
-          {view === "all" && catalogPagination && (
+          {showListPagination && listPagination && (
             <BrowsePagination
-              pagination={catalogPagination}
-              page={allPage}
+              page={catalogPage}
+              lastPage={listPagination.lastPage}
+              totalLabel={listPagination.totalLabel}
               isLoading={listIsLoading}
-              onPageChange={setAllPage}
+              jumpInputId="catalog-page-jump-bottom"
+              onPageChange={setCatalogPage}
             />
           )}
         </div>
