@@ -639,9 +639,11 @@ export function WatchlistApp() {
       </div>
 
       <div
-        className={`relative mx-auto w-full px-4 py-8 sm:px-6 lg:px-8 sm:py-12 ${
-          viewTab === "leaderboard" ? "max-w-5xl" : "max-w-[1760px]"
-        }`}
+        className={
+          viewTab === "leaderboard"
+            ? "relative mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 sm:py-12"
+            : "relative w-full px-3 py-6 sm:px-4 sm:py-8 lg:px-5"
+        }
       >
         <header className="mb-8">
           <div className="mb-6 flex items-start justify-between gap-4">
@@ -825,7 +827,7 @@ export function WatchlistApp() {
             />
 
             {!openFolderId && (
-              <section>
+              <section className="w-full">
                 <div className="mb-4">
                   <h2 className="text-lg font-semibold text-white">Alle Anime</h2>
                   <p className="text-sm text-slate-500">

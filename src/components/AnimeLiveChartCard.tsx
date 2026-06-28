@@ -25,7 +25,7 @@ export type AnimeLiveChartData = AnimeReleaseFields & {
 };
 
 export const ANIME_CARD_GRID =
-  "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+  "grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4";
 
 type AnimeLiveChartCardProps = {
   anime: AnimeLiveChartData;
@@ -109,7 +109,7 @@ export function AnimeLiveChartCard({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-row">
-        <div className="relative w-[96px] shrink-0 sm:w-[104px]">
+        <div className="relative w-[108px] shrink-0 lg:w-[118px]">
           {countdownTarget && countdown && (
             <div className="absolute inset-x-0 top-0 z-10 bg-black/90 px-2 py-1.5 text-center">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
