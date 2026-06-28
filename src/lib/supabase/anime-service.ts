@@ -1,6 +1,10 @@
 import { searchMalAnime, fetchMalAnimeDetails } from "@/lib/mal/jikan";
 import { mergeGenres, prettifySeriesKey, isLikelySeasonSequel } from "@/lib/mal/titles";
 import {
+  resolveAnimeRuntime,
+  runtimeNeedsPersist,
+} from "@/lib/anime/runtime";
+import {
   FINISHED_STATUSES,
   getMemberStatus,
   migrateWatchedByToStatuses,
@@ -272,6 +276,101 @@ export async function updateAnimeMalMetadata(
   return mapRow(data);
 }
 
+export async function updateAnimeRuntimeFields(
+  animeId: string,
+  runtime: {
+    episodes: number | null;
+    episodeDurationMin: number | null;
+    totalDurationMin: number | null;
+  },
+): Promise<AnimeEntry> {
+  const { data, error } = await supabase
+    .from("anime")
+    .update({
+      episodes: runtime.episodes,
+      episode_duration_min: runtime.episodeDurationMin,
+      total_duration_min: runtime.totalDurationMin,
+    })
+    .eq("id", animeId)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return mapRow(data);
+}
+
+/** Fill and persist episode/runtime data so completed stats always count. */
+export async function ensureAnimeHasRuntime(
+  anime: AnimeEntry,
+): Promise<AnimeEntry> {
+  if (anime.malId && anime.malId > 0) {
+    const details = await fetchMalAnimeDetails([anime.malId]);
+    const mal = details.get(anime.malId);
+    if (mal && (mal.totalDurationMin || mal.episodes)) {
+      const resolved = resolveAnimeRuntime({
+        episodes: mal.episodes ?? anime.episodes,
+        episodeDurationMin: mal.episodeDurationMin ?? anime.episodeDurationMin,
+        totalDurationMin: mal.totalDurationMin ?? anime.totalDurationMin,
+      });
+      return updateAnimeRuntimeFields(anime.id, resolved);
+    }
+  }
+
+  if (!runtimeNeedsPersist(anime)) {
+    return anime;
+  }
+
+  const resolved = resolveAnimeRuntime(anime);
+  return updateAnimeRuntimeFields(anime.id, resolved);
+}
+
+export function applyAnimeMetadataPatch(
+  prev: AnimeEntry[],
+  patched: AnimeEntry[],
+): AnimeEntry[] {
+  if (prev.length === 0) {
+    return patched;
+  }
+
+  const patchMap = new Map(patched.map((entry) => [entry.id, entry]));
+
+  const merged = prev.map((entry) => {
+    const update = patchMap.get(entry.id);
+    if (!update) return entry;
+    return {
+      ...entry,
+      title: update.title,
+      titleEnglish: update.titleEnglish,
+      seriesKey: update.seriesKey,
+      malStatus: update.malStatus,
+      malId: update.malId ?? entry.malId,
+      anilistId: update.anilistId ?? entry.anilistId,
+      episodes: update.episodes,
+      episodeDurationMin: update.episodeDurationMin,
+      totalDurationMin: update.totalDurationMin,
+      genres: update.genres,
+      airedFrom: update.airedFrom ?? entry.airedFrom,
+      airedTo: update.airedTo ?? entry.airedTo,
+      broadcastDay: update.broadcastDay ?? entry.broadcastDay,
+      broadcastTime: update.broadcastTime ?? entry.broadcastTime,
+      malSeason: update.malSeason ?? entry.malSeason,
+      malYear: update.malYear ?? entry.malYear,
+    };
+  });
+
+  const prevIds = new Set(prev.map((entry) => entry.id));
+  const added = patched.filter((entry) => !prevIds.has(entry.id));
+  added.sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+
+  return [...added, ...merged];
+}
+
 export async function enrichAnimeFromMal(anime: AnimeEntry): Promise<AnimeEntry> {
   const needsMetadata = !anime.totalDurationMin || !anime.airedFrom;
   if (anime.malId && !needsMetadata) {
@@ -309,7 +408,11 @@ export async function enrichMissingMalMetadata(
   animeList: AnimeEntry[],
 ): Promise<AnimeEntry[]> {
   const missing = animeList.filter(
-    (anime) => !anime.totalDurationMin || !anime.airedFrom,
+    (anime) =>
+      !anime.totalDurationMin ||
+      !anime.airedFrom ||
+      !anime.episodes ||
+      runtimeNeedsPersist(anime),
   );
   if (missing.length === 0) {
     return animeList;
@@ -319,9 +422,15 @@ export async function enrichMissingMalMetadata(
 
   for (const anime of missing) {
     try {
-      const enriched = await enrichAnimeFromMal(anime);
+      let enriched = anime;
+      if (!anime.totalDurationMin || !anime.airedFrom || !anime.malId) {
+        enriched = await enrichAnimeFromMal(anime);
+      }
+      if (runtimeNeedsPersist(enriched)) {
+        enriched = await ensureAnimeHasRuntime(enriched);
+      }
       updated.set(anime.id, enriched);
-      await new Promise((resolve) => setTimeout(resolve, 400));
+      await new Promise((resolve) => setTimeout(resolve, 300));
     } catch {
       updated.set(anime.id, anime);
     }
@@ -338,12 +447,23 @@ function metadataNeedsReconcile(
     totalDurationMin: number | null;
   },
 ): boolean {
-  if (!anime.totalDurationMin || !anime.episodeDurationMin) return true;
+  if (!anime.totalDurationMin || !anime.episodeDurationMin || !anime.episodes) {
+    return true;
+  }
+  if (runtimeNeedsPersist(anime)) return true;
   if (mal.episodes != null && anime.episodes !== mal.episodes) return true;
   if (
     mal.episodes != null &&
     anime.episodes != null &&
     anime.episodes > mal.episodes
+  ) {
+    return true;
+  }
+  if (
+    mal.totalDurationMin != null &&
+    anime.totalDurationMin != null &&
+    mal.totalDurationMin > 0 &&
+    anime.totalDurationMin > mal.totalDurationMin * 2
   ) {
     return true;
   }
@@ -355,35 +475,52 @@ export async function reconcileAnimeMetadata(
   animeList: AnimeEntry[],
 ): Promise<AnimeEntry[]> {
   const withMal = animeList.filter((anime) => anime.malId && anime.malId > 0);
-  if (withMal.length === 0) return animeList;
-
-  const detailsMap = await fetchMalAnimeDetails(withMal.map((a) => a.malId!));
   const updated = new Map<string, AnimeEntry>();
 
-  for (const anime of withMal) {
-    const mal = detailsMap.get(anime.malId!);
-    if (!mal || !metadataNeedsReconcile(anime, mal)) continue;
+  if (withMal.length > 0) {
+    const detailsMap = await fetchMalAnimeDetails(withMal.map((a) => a.malId!));
 
+    for (const anime of withMal) {
+      const mal = detailsMap.get(anime.malId!);
+      if (!mal || !metadataNeedsReconcile(anime, mal)) continue;
+
+      try {
+        const resolved = resolveAnimeRuntime({
+          episodes: mal.episodes ?? anime.episodes,
+          episodeDurationMin: mal.episodeDurationMin ?? anime.episodeDurationMin,
+          totalDurationMin: mal.totalDurationMin ?? anime.totalDurationMin,
+        });
+        const fixed = await updateAnimeMalMetadata(anime.id, {
+          malId: mal.malId,
+          title: mal.title,
+          titleEnglish: mal.titleEnglish,
+          seriesKey: mal.seriesKey,
+          malStatus: mal.malStatus,
+          episodes: resolved.episodes,
+          episodeDurationMin: resolved.episodeDurationMin,
+          totalDurationMin: resolved.totalDurationMin,
+          genres: mergeGenres(anime.genres, mal.genres),
+          airedFrom: mal.airedFrom ?? anime.airedFrom,
+          airedTo: mal.airedTo ?? anime.airedTo,
+          broadcastDay: mal.broadcastDay ?? anime.broadcastDay,
+          broadcastTime: mal.broadcastTime ?? anime.broadcastTime,
+          malSeason: mal.malSeason ?? anime.malSeason,
+          malYear: mal.malYear ?? anime.malYear,
+        });
+        updated.set(anime.id, fixed);
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      } catch {
+        // keep existing row
+      }
+    }
+  }
+
+  for (const anime of animeList) {
+    if (updated.has(anime.id)) continue;
+    if (!runtimeNeedsPersist(anime)) continue;
     try {
-      const fixed = await updateAnimeMalMetadata(anime.id, {
-        malId: mal.malId,
-        title: mal.title,
-        titleEnglish: mal.titleEnglish,
-        seriesKey: mal.seriesKey,
-        malStatus: mal.malStatus,
-        episodes: mal.episodes,
-        episodeDurationMin: mal.episodeDurationMin,
-        totalDurationMin: mal.totalDurationMin,
-        genres: mergeGenres(anime.genres, mal.genres),
-        airedFrom: mal.airedFrom ?? anime.airedFrom,
-        airedTo: mal.airedTo ?? anime.airedTo,
-        broadcastDay: mal.broadcastDay ?? anime.broadcastDay,
-        broadcastTime: mal.broadcastTime ?? anime.broadcastTime,
-        malSeason: mal.malSeason ?? anime.malSeason,
-        malYear: mal.malYear ?? anime.malYear,
-      });
+      const fixed = await ensureAnimeHasRuntime(anime);
       updated.set(anime.id, fixed);
-      await new Promise((resolve) => setTimeout(resolve, 200));
     } catch {
       // keep existing row
     }

@@ -27,6 +27,8 @@ import {
   moveAnimeToFolder,
   renameAnime,
   reconcileAnimeMetadata,
+  applyAnimeMetadataPatch,
+  ensureAnimeHasRuntime,
   subscribeToAnimeChanges,
   updateMemberStatuses,
   updateRatings,
@@ -211,26 +213,21 @@ export function WatchlistApp() {
           if (!cancelled) setFolderSetupNeeded(true);
         }
 
+        let ready = list;
+        try {
+          markLocalWrite();
+          ready = await reconcileAnimeMetadata(list);
+          ready = await enrichMissingMalMetadata(ready);
+        } catch {
+          // Stats still use resolved fallback runtime when sync fails
+        }
+
         if (!cancelled) {
-          setAnimeList((prev) => mergeAnimeLists(prev, list));
+          setAnimeList((prev) => applyAnimeMetadataPatch(prev, ready));
           setMembers(memberList);
           setAllowedNames(allowed);
           setFolders(folderList);
           setError(null);
-        }
-
-        if (!cancelled) {
-          void (async () => {
-            try {
-              let refreshed = await reconcileAnimeMetadata(list);
-              refreshed = await enrichMissingMalMetadata(refreshed);
-              if (!cancelled) {
-                setAnimeList((prev) => mergeAnimeLists(prev, refreshed));
-              }
-            } catch {
-              // Stats still use fallback episode length when MAL sync fails
-            }
-          })();
         }
       } catch (err) {
         if (!cancelled) {
@@ -604,22 +601,42 @@ export function WatchlistApp() {
     const anime = animeList.find((entry) => entry.id === animeId);
     if (!anime) return;
 
-    const previousStatus = getMemberStatus(anime.memberStatuses, currentUser);
+    let runtimeAnime = anime;
+    if (isFinishedStatus(status)) {
+      try {
+        markLocalWrite();
+        runtimeAnime = await ensureAnimeHasRuntime(anime);
+        if (runtimeAnime !== anime) {
+          setAnimeList((prev) =>
+            prev.map((entry) =>
+              entry.id === animeId ? { ...entry, ...runtimeAnime } : entry,
+            ),
+          );
+        }
+      } catch {
+        runtimeAnime = anime;
+      }
+    }
+
+    const previousStatus = getMemberStatus(
+      runtimeAnime.memberStatuses,
+      currentUser,
+    );
     let episodesWatched: number | undefined;
     if (
       statusShowsEpisodeProgress(status) &&
       isFinishedStatus(previousStatus) &&
-      anime.episodes != null
+      runtimeAnime.episodes != null
     ) {
-      episodesWatched = anime.episodes;
+      episodesWatched = runtimeAnime.episodes;
     } else if (statusShowsEpisodeProgress(status)) {
       episodesWatched =
-        getMemberEpisodesWatched(anime.memberStatuses, currentUser) ?? 0;
+        getMemberEpisodesWatched(runtimeAnime.memberStatuses, currentUser) ?? 0;
     }
 
     markLocalWrite();
     const nextStatuses = setMemberStatus(
-      anime.memberStatuses,
+      runtimeAnime.memberStatuses,
       currentUser,
       status,
       episodesWatched,
@@ -628,7 +645,7 @@ export function WatchlistApp() {
     setAnimeList((prev) =>
       prev.map((entry) =>
         entry.id === animeId
-          ? { ...entry, memberStatuses: nextStatuses }
+          ? { ...entry, ...runtimeAnime, memberStatuses: nextStatuses }
           : entry,
       ),
     );
@@ -691,10 +708,14 @@ export function WatchlistApp() {
 
     for (const anime of animeList) {
       const status = getMemberStatus(anime.memberStatuses, currentUser);
+      if (status === "none") continue;
+
       const watchedEps = getMemberProgressEpisodes(
         anime.memberStatuses,
         currentUser,
         anime.episodes,
+        anime.episodeDurationMin,
+        anime.totalDurationMin,
       );
       const watchedMins = getMemberProgressMinutes(
         anime.memberStatuses,
@@ -704,11 +725,14 @@ export function WatchlistApp() {
         anime.totalDurationMin,
       );
 
-      if (watchedEps <= 0 && watchedMins <= 0) continue;
-
       if (isFinishedStatus(status)) {
         series += 1;
+        episodes += watchedEps;
+        minutes += watchedMins;
+        continue;
       }
+
+      if (watchedEps <= 0 && watchedMins <= 0) continue;
 
       episodes += watchedEps;
       minutes += watchedMins;

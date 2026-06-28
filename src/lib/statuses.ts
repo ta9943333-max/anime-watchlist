@@ -82,6 +82,8 @@ export const STATUS_OPTIONS: {
   },
 ];
 
+import { resolveAnimeRuntime } from "@/lib/anime/runtime";
+
 export const FINISHED_STATUSES: AnimeStatus[] = ["completed", "rewatching"];
 
 /** Fallback when MAL has no runtime data (typical TV episode length). */
@@ -252,9 +254,16 @@ export function getMemberProgressEpisodes(
   statuses: MemberStatuses,
   memberName: string,
   totalEpisodes: number | null,
+  episodeDurationMin: number | null = null,
+  totalDurationMin: number | null = null,
 ): number {
   const status = getMemberStatus(statuses, memberName);
-  const total = totalEpisodes ?? 0;
+  const runtime = resolveAnimeRuntime({
+    episodes: totalEpisodes,
+    episodeDurationMin,
+    totalDurationMin,
+  });
+  const total = runtime.episodes;
 
   if (status === "rewatching") {
     return total * getMemberRewatchCount(statuses, memberName);
@@ -280,48 +289,42 @@ export function getMemberProgressMinutes(
   totalDurationMin: number | null,
 ): number {
   const status = getMemberStatus(statuses, memberName);
+  if (status === "none") return 0;
+
+  const runtime = resolveAnimeRuntime({
+    episodes: totalEpisodes,
+    episodeDurationMin,
+    totalDurationMin,
+  });
+
+  if (status === "rewatching") {
+    return Math.round(
+      runtime.totalDurationMin * getMemberRewatchCount(statuses, memberName),
+    );
+  }
+
+  if (status === "completed") {
+    return Math.round(runtime.totalDurationMin);
+  }
+
   const watchedEps = getMemberProgressEpisodes(
     statuses,
     memberName,
     totalEpisodes,
+    episodeDurationMin,
+    totalDurationMin,
   );
   if (watchedEps <= 0) return 0;
 
-  if (status === "rewatching" && totalDurationMin != null && totalDurationMin > 0) {
-    return Math.round(
-      totalDurationMin * getMemberRewatchCount(statuses, memberName),
-    );
-  }
-
-  if (status === "completed" && totalDurationMin != null && totalDurationMin > 0) {
-    return Math.round(totalDurationMin);
-  }
-
   if (
     statusShowsEpisodeProgress(status) &&
-    totalDurationMin != null &&
-    totalDurationMin > 0 &&
-    totalEpisodes != null &&
-    totalEpisodes > 0
+    runtime.episodes > 0 &&
+    runtime.totalDurationMin > 0
   ) {
-    return Math.round((watchedEps / totalEpisodes) * totalDurationMin);
+    return Math.round((watchedEps / runtime.episodes) * runtime.totalDurationMin);
   }
 
-  let perEpisode = episodeDurationMin;
-  if (
-    perEpisode == null &&
-    totalDurationMin != null &&
-    totalDurationMin > 0 &&
-    totalEpisodes != null &&
-    totalEpisodes > 0
-  ) {
-    perEpisode = totalDurationMin / totalEpisodes;
-  }
-  if (perEpisode == null || perEpisode <= 0) {
-    perEpisode = DEFAULT_EPISODE_DURATION_MIN;
-  }
-
-  return Math.round(watchedEps * perEpisode);
+  return Math.round(watchedEps * runtime.episodeDurationMin);
 }
 
 export function countFinishedMembers(
