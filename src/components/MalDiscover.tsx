@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarClock,
+  ChevronLeft,
+  ChevronRight,
   Clapperboard,
   Dices,
   Globe2,
@@ -21,11 +23,14 @@ import {
   addPayloadFromDiscoverItem,
 } from "@/lib/mal/discover-utils";
 import {
+  fetchMalBrowse,
+  fetchMalRandom,
   fetchMalSeason,
   fetchMalTop,
   hydrateDiscoverImages,
   searchMalAnime,
   type DiscoverItem,
+  type MalPagination,
 } from "@/lib/mal/jikan";
 import {
   getCountdownTarget,
@@ -80,9 +85,9 @@ const VIEW_META: Record<
   },
   all: {
     label: "All Anime",
-    title: "All seasonal anime",
+    title: "All anime on MyAnimeList",
     description:
-      "Everything from this and upcoming seasons — mark Completed or Watching to update your stats.",
+      "Browse the full MAL catalog — 25 per page, sorted by popularity. Mark Completed or Watching to update your stats.",
     icon: Globe2,
   },
   airing: {
@@ -115,9 +120,63 @@ const PICK_MODE_META: Record<
   },
   lucky: {
     label: "Feeling lucky",
-    description: "One random pick — roll again until something clicks.",
+    description:
+      "One random anime from all of MyAnimeList — each roll picks from the entire catalog.",
   },
 };
+
+function BrowsePagination({
+  pagination,
+  page,
+  isLoading,
+  onPageChange,
+}: {
+  pagination: MalPagination;
+  page: number;
+  isLoading: boolean;
+  onPageChange: (page: number) => void;
+}) {
+  const canPrev = page > 1;
+  const canNext = pagination.hasNextPage;
+
+  return (
+    <div className="flex flex-col items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/50 px-4 py-3 sm:flex-row">
+      <button
+        type="button"
+        disabled={!canPrev || isLoading}
+        onClick={() => onPageChange(page - 1)}
+        className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        Previous
+      </button>
+
+      <p className="text-center text-sm text-slate-400">
+        Page{" "}
+        <span className="font-semibold text-white">{pagination.currentPage}</span>{" "}
+        of{" "}
+        <span className="font-semibold text-white">
+          {pagination.lastVisiblePage.toLocaleString()}
+        </span>
+        <span className="mx-2 text-slate-600">·</span>
+        <span className="font-semibold text-sky-300">
+          {pagination.total.toLocaleString()}
+        </span>{" "}
+        anime on MAL
+      </p>
+
+      <button
+        type="button"
+        disabled={!canNext || isLoading}
+        onClick={() => onPageChange(page + 1)}
+        className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Next
+        <ChevronRight className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
 
 function sortByCountdown(items: DiscoverItem[]): DiscoverItem[] {
   return [...items].sort((a, b) => {
@@ -181,11 +240,6 @@ async function enrichItems(items: DiscoverItem[]): Promise<DiscoverItem[]> {
   return hydrateDiscoverImages(enriched);
 }
 
-function pickRandomItem(items: DiscoverItem[]): DiscoverItem | null {
-  if (items.length === 0) return null;
-  return items[Math.floor(Math.random() * items.length)] ?? null;
-}
-
 export function MalDiscover({
   animeList,
   currentUser,
@@ -196,7 +250,10 @@ export function MalDiscover({
   const [view, setView] = useState<DiscoverView>("pick");
   const [pickMode, setPickMode] = useState<PickMode>("season");
   const [luckyPick, setLuckyPick] = useState<DiscoverItem | null>(null);
-  const [luckyPool, setLuckyPool] = useState<DiscoverItem[]>([]);
+  const [isRolling, setIsRolling] = useState(false);
+  const [allPage, setAllPage] = useState(1);
+  const [browsePagination, setBrowsePagination] =
+    useState<MalPagination | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [resultState, setResultState] = useState<ResultState>({
@@ -208,6 +265,7 @@ export function MalDiscover({
   const [genreFilter, setGenreFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const loadSeqRef = useRef(0);
+  const sectionRef = useRef<HTMLElement>(null);
 
   const results =
     resultState.view === view ? resultState.items : [];
@@ -225,18 +283,32 @@ export function MalDiscover({
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const rollLucky = useCallback((pool: DiscoverItem[]) => {
-    setLuckyPick(pickRandomItem(pool));
-  }, []);
+  const rollLucky = useCallback(async () => {
+    setIsRolling(true);
+    try {
+      const random = await fetchMalRandom();
+      let items = await enrichItems([random]);
+      items = attachWatchlistMeta(items, animeList, currentUser);
+      setLuckyPick(items[0] ?? null);
+    } catch {
+      setLuckyPick(null);
+    } finally {
+      setIsRolling(false);
+    }
+  }, [animeList, currentUser]);
 
   useEffect(() => {
     const activeView = view;
     const activePickMode = pickMode;
+    const activeAllPage = allPage;
     const seq = ++loadSeqRef.current;
     setResultState({ view: activeView, items: [] });
     setIsLoading(true);
     if (activeView !== "pick" || activePickMode !== "lucky") {
       setLuckyPick(null);
+    }
+    if (activeView !== "all") {
+      setBrowsePagination(null);
     }
 
     async function load() {
@@ -266,33 +338,27 @@ export function MalDiscover({
         }
 
         if (activeView === "all") {
-          const [nowItems, upcomingItems] = await Promise.all([
-            fetchMalSeason("now"),
-            fetchMalSeason("upcoming"),
-          ]);
-          let items = dedupeByMalId([...nowItems, ...upcomingItems]);
+          const { results, pagination } = await fetchMalBrowse(activeAllPage);
+          let items = dedupeByMalId(results);
           items = await enrichItems(items);
           if (seq !== loadSeqRef.current) return;
+          setBrowsePagination(pagination);
           setResultState({
             view: activeView,
             items: attachWatchlistMeta(items, animeList, currentUser),
           });
+          sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
           return;
         }
 
         if (activeView === "pick") {
           if (activePickMode === "lucky") {
-            const [seasonItems, popularItems] = await Promise.all([
-              fetchMalTop("season", 40),
-              fetchMalTop("popular", 40),
-            ]);
-            let pool = dedupeByMalId([...seasonItems, ...popularItems]);
-            pool = await enrichItems(pool);
-            pool = attachWatchlistMeta(pool, animeList, currentUser);
+            const random = await fetchMalRandom();
+            let items = await enrichItems([random]);
+            items = attachWatchlistMeta(items, animeList, currentUser);
             if (seq !== loadSeqRef.current) return;
-            setLuckyPool(pool);
-            setLuckyPick(pickRandomItem(pool));
-            setResultState({ view: activeView, items: pool });
+            setLuckyPick(items[0] ?? null);
+            setResultState({ view: activeView, items: [] });
             return;
           }
 
@@ -346,7 +412,7 @@ export function MalDiscover({
     }
 
     void load();
-  }, [view, pickMode, debouncedQuery, animeList, currentUser]);
+  }, [view, pickMode, debouncedQuery, animeList, currentUser, allPage]);
 
   const genres = useMemo(() => {
     const set = new Set<string>();
@@ -382,6 +448,10 @@ export function MalDiscover({
 
     if (view === "pick" && pickMode !== "lucky") {
       return sortByScore(list);
+    }
+
+    if (view === "all") {
+      return list;
     }
 
     return sortByCountdown(list);
@@ -437,7 +507,7 @@ export function MalDiscover({
   const showLucky = view === "pick" && pickMode === "lucky";
 
   return (
-    <section className="space-y-8">
+    <section ref={sectionRef} className="space-y-8">
       <div className="border-b border-slate-800 pb-6">
         <h2 className="text-2xl font-bold text-white">{meta.title}</h2>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-400">
@@ -465,6 +535,7 @@ export function MalDiscover({
                 setIsLoading(true);
                 setGenreFilter(null);
                 setStatusFilter("all");
+                if (key === "all") setAllPage(1);
                 if (key !== "search") setSearchQuery("");
               }}
               className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
@@ -617,8 +688,19 @@ export function MalDiscover({
 
       {!showLucky && (
         <p className="text-xs uppercase tracking-wide text-slate-500">
-          {filteredResults.length} titles
+          {view === "all" && browsePagination
+            ? `${browsePagination.total.toLocaleString()} anime on MAL · showing ${filteredResults.length} on this page`
+            : `${filteredResults.length} titles`}
         </p>
+      )}
+
+      {view === "all" && browsePagination && !isLoading && (
+        <BrowsePagination
+          pagination={browsePagination}
+          page={allPage}
+          isLoading={isLoading}
+          onPageChange={setAllPage}
+        />
       )}
 
       {isLoading ? (
@@ -636,19 +718,31 @@ export function MalDiscover({
                   Tonight&apos;s pick
                 </p>
                 <p className="mt-1 text-sm text-slate-400">
-                  {luckyPool.length} anime in the pool
+                  Random from all of MyAnimeList — every roll is a new title
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => rollLucky(luckyPool)}
-                className="inline-flex items-center gap-2 rounded-xl border border-amber-500/50 bg-amber-600/20 px-5 py-2.5 text-sm font-medium text-amber-100 transition hover:bg-amber-600/35"
+                disabled={isRolling}
+                onClick={() => void rollLucky()}
+                className="inline-flex items-center gap-2 rounded-xl border border-amber-500/50 bg-amber-600/20 px-5 py-2.5 text-sm font-medium text-amber-100 transition hover:bg-amber-600/35 disabled:opacity-50"
               >
-                <Dices className="h-4 w-4" />
+                {isRolling ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Dices className="h-4 w-4" />
+                )}
                 Feeling lucky — roll again
               </button>
             </div>
-            {renderDiscoverCard(luckyPick)}
+            {isRolling ? (
+              <div className="flex items-center justify-center gap-3 py-12 text-slate-400">
+                <Loader2 className="h-6 w-6 animate-spin" />
+                Rolling…
+              </div>
+            ) : (
+              renderDiscoverCard(luckyPick)
+            )}
           </div>
         ) : (
           <p className="py-24 text-center text-slate-500">
@@ -662,6 +756,14 @@ export function MalDiscover({
       ) : (
         <div className="flex flex-col gap-8">
           {filteredResults.map((result) => renderDiscoverCard(result))}
+          {view === "all" && browsePagination && (
+            <BrowsePagination
+              pagination={browsePagination}
+              page={allPage}
+              isLoading={isLoading}
+              onPageChange={setAllPage}
+            />
+          )}
         </div>
       )}
     </section>

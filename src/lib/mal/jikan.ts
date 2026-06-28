@@ -93,6 +93,46 @@ export async function fetchMalSeason(
   return data.results;
 }
 
+export type MalPagination = {
+  currentPage: number;
+  lastVisiblePage: number;
+  hasNextPage: boolean;
+  total: number;
+  perPage: number;
+  count: number;
+};
+
+export type MalBrowseResponse = {
+  results: MalSearchResult[];
+  pagination: MalPagination;
+};
+
+export async function fetchMalBrowse(
+  page = 1,
+  limit = 25,
+): Promise<MalBrowseResponse> {
+  const response = await fetch(
+    `/api/mal/browse?page=${page}&limit=${limit}&order_by=popularity&sort=desc`,
+  );
+
+  if (!response.ok) {
+    throw new Error("MyAnimeList browse failed");
+  }
+
+  return (await response.json()) as MalBrowseResponse;
+}
+
+export async function fetchMalRandom(): Promise<MalSearchResult> {
+  const response = await fetch("/api/mal/random", { cache: "no-store" });
+
+  if (!response.ok) {
+    throw new Error("MyAnimeList random fetch failed");
+  }
+
+  const data = (await response.json()) as { result: MalSearchResult };
+  return data.result;
+}
+
 export type MalTopType = "popular" | "airing" | "season" | "year";
 
 export async function fetchMalTop(
