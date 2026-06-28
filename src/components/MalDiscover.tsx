@@ -28,6 +28,7 @@ import {
 import {
   loadDiscoverStatuses,
   setDiscoverEpisodesWatched,
+  setDiscoverRating,
   setDiscoverStatus,
   type DiscoverStatuses,
 } from "@/lib/discover-status";
@@ -66,6 +67,7 @@ type MalDiscoverProps = {
   onSetMyStatus: (animeId: string, status: AnimeStatus) => void;
   onSetEpisodesWatched: (animeId: string, episodesWatched: number) => void;
   onSetRewatchCount: (animeId: string, rewatchCount: number) => void;
+  onRateAnime: (animeId: string, rating: number) => void;
 };
 
 type DiscoverView = "pick" | "search" | "all" | "airing" | "upcoming";
@@ -375,8 +377,8 @@ function resolveUserStatus(
       : item.anilistId
         ? `anilist:${item.anilistId}`
         : null;
-  if (localKey && discoverStatuses[localKey]) {
-    return discoverStatuses[localKey].status;
+  if (localKey && discoverStatuses[localKey]?.status) {
+    return discoverStatuses[localKey].status!;
   }
   return "none";
 }
@@ -442,6 +444,12 @@ function attachWatchlistMeta(
       myRewatchCount: inList
         ? getMemberRewatchCount(inList.memberStatuses, currentUser)
         : item.myRewatchCount,
+      myRating:
+        inList && inList.ratings[currentUser] && inList.ratings[currentUser] > 0
+          ? inList.ratings[currentUser]
+          : local?.rating && local.rating > 0
+            ? local.rating
+            : (item.myRating ?? 0),
       title: inList ? getDisplayTitle(inList) : item.title,
     };
   });
@@ -487,6 +495,7 @@ export function MalDiscover({
   onSetMyStatus,
   onSetEpisodesWatched,
   onSetRewatchCount,
+  onRateAnime,
 }: MalDiscoverProps) {
   const catalog = useAnilistCatalog();
   const [view, setView] = useState<DiscoverView>("pick");
@@ -961,6 +970,20 @@ export function MalDiscover({
     [currentUser],
   );
 
+  const handlePersonalRating = useCallback(
+    (item: DiscoverItem, rating: number) => {
+      setDiscoverStatuses(
+        setDiscoverRating(
+          currentUser,
+          item.malId,
+          item.anilistId,
+          rating,
+        ),
+      );
+    },
+    [currentUser],
+  );
+
   function renderDiscoverCard(result: DiscoverItem) {
     const inList = findInWatchlist(result);
 
@@ -975,10 +998,12 @@ export function MalDiscover({
         onSetMyStatus={onSetMyStatus}
         onSetEpisodesWatched={onSetEpisodesWatched}
         onSetRewatchCount={onSetRewatchCount}
+        onRateAnime={onRateAnime}
         onSetPersonalStatus={(status) => handlePersonalStatus(result, status)}
         onSetPersonalEpisodes={(episodes) =>
           handlePersonalEpisodes(result, episodes)
         }
+        onSetPersonalRating={(rating) => handlePersonalRating(result, rating)}
       />
     );
   }
@@ -996,7 +1021,7 @@ export function MalDiscover({
           <p className="mt-3 text-xs text-slate-500">
             Deine persönliche Liste findest du oben unter{" "}
             <span className="font-medium text-violet-300">Watchlist</span> — hier
-            geht es nur ums Entdecken und Hinzufügen.
+            geht es ums Entdecken — Status & Bewertung ohne Listen-Eintrag möglich.
           </p>
         )}
       </div>

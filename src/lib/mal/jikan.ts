@@ -34,6 +34,7 @@ export type DiscoverItem = MalSearchResult & {
   myStatus?: AnimeStatus;
   myEpisodesWatched?: number | null;
   myRewatchCount?: number | null;
+  myRating?: number;
 };
 
 export function parseMalDuration(

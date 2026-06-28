@@ -7,8 +7,9 @@ import {
 } from "@/lib/statuses";
 
 export type DiscoverStatusEntry = {
-  status: AnimeStatus;
+  status?: AnimeStatus;
   episodesWatched?: number;
+  rating?: number;
   updatedAt: string;
 };
 
@@ -60,12 +61,24 @@ export function setDiscoverStatus(
   const next = { ...loadDiscoverStatuses(user) };
 
   if (status === "none") {
-    delete next[key];
+    const existing = next[key];
+    if (existing?.rating && existing.rating > 0) {
+      next[key] = {
+        rating: existing.rating,
+        updatedAt: new Date().toISOString(),
+      };
+    } else {
+      delete next[key];
+    }
   } else {
     const entry: DiscoverStatusEntry = {
       status,
       updatedAt: new Date().toISOString(),
     };
+    const previous = next[key];
+    if (previous?.rating && previous.rating > 0) {
+      entry.rating = previous.rating;
+    }
     if (
       statusShowsEpisodeProgress(status) &&
       episodesWatched != null &&
@@ -90,7 +103,7 @@ export function setDiscoverEpisodesWatched(
   if (!key) return loadDiscoverStatuses(user);
 
   const current = loadDiscoverStatuses(user)[key];
-  if (!current || !statusShowsEpisodeProgress(current.status)) {
+  if (!current?.status || !statusShowsEpisodeProgress(current.status)) {
     return loadDiscoverStatuses(user);
   }
 
@@ -103,6 +116,46 @@ export function setDiscoverEpisodesWatched(
   );
 }
 
+export function setDiscoverRating(
+  user: string,
+  malId: number | null | undefined,
+  anilistId: number | null | undefined,
+  rating: number,
+): DiscoverStatuses {
+  const key = discoverItemKey(malId, anilistId);
+  if (!key) return loadDiscoverStatuses(user);
+
+  const next = { ...loadDiscoverStatuses(user) };
+  const current = next[key];
+
+  if (rating <= 0) {
+    if (current?.status) {
+      const { rating: _removed, ...rest } = current;
+      next[key] = { ...rest, updatedAt: new Date().toISOString() };
+    } else {
+      delete next[key];
+    }
+  } else {
+    next[key] = {
+      ...current,
+      rating,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  writeDiscoverStatuses(user, next);
+  return next;
+}
+
+export function getDiscoverRating(
+  user: string,
+  malId: number | null | undefined,
+  anilistId: number | null | undefined,
+): number {
+  const entry = getDiscoverStatusEntry(user, malId, anilistId);
+  return entry?.rating && entry.rating > 0 ? entry.rating : 0;
+}
+
 export function getDiscoverStatusEntry(
   user: string,
   malId: number | null | undefined,
@@ -111,6 +164,20 @@ export function getDiscoverStatusEntry(
   const key = discoverItemKey(malId, anilistId);
   if (!key) return null;
   return loadDiscoverStatuses(user)[key] ?? null;
+}
+
+export function clearDiscoverEntry(
+  user: string,
+  malId: number | null | undefined,
+  anilistId: number | null | undefined,
+): DiscoverStatuses {
+  const key = discoverItemKey(malId, anilistId);
+  if (!key) return loadDiscoverStatuses(user);
+
+  const next = { ...loadDiscoverStatuses(user) };
+  delete next[key];
+  writeDiscoverStatuses(user, next);
+  return next;
 }
 
 export function clearDiscoverStatus(
@@ -133,7 +200,7 @@ export function applyDiscoverStatusToMemberStatuses(
   anilistId: number | null | undefined,
 ) {
   const local = getDiscoverStatusEntry(user, malId, anilistId);
-  if (!local || local.status === "none") return memberStatuses;
+  if (!local?.status || local.status === "none") return memberStatuses;
 
   return setMemberStatus(
     memberStatuses,
@@ -141,6 +208,44 @@ export function applyDiscoverStatusToMemberStatuses(
     local.status,
     local.episodesWatched,
   );
+}
+
+export function applyDiscoverEntryToWatchlist(
+  memberStatuses: MemberStatuses,
+  ratings: Record<string, number>,
+  user: string,
+  malId: number | null | undefined,
+  anilistId: number | null | undefined,
+): {
+  memberStatuses: MemberStatuses;
+  ratings: Record<string, number>;
+  changed: boolean;
+} {
+  const local = getDiscoverStatusEntry(user, malId, anilistId);
+  if (!local) {
+    return { memberStatuses, ratings, changed: false };
+  }
+
+  let nextStatuses = memberStatuses;
+  let nextRatings = ratings;
+  let changed = false;
+
+  if (local.status && local.status !== "none") {
+    nextStatuses = setMemberStatus(
+      memberStatuses,
+      user,
+      local.status,
+      local.episodesWatched,
+    );
+    changed = true;
+  }
+
+  if (local.rating && local.rating > 0) {
+    nextRatings = { ...ratings, [user]: local.rating };
+    changed = true;
+  }
+
+  return { memberStatuses: nextStatuses, ratings: nextRatings, changed };
 }
 
 export type DiscoverStatusSync = {
@@ -170,6 +275,9 @@ export function getDiscoverStatusSyncs(
     if (!key || !localStatuses[key]) continue;
 
     if (getMemberStatus(anime.memberStatuses, user) !== "none") continue;
+
+    const local = localStatuses[key];
+    if (!local?.status || local.status === "none") continue;
 
     const merged = applyDiscoverStatusToMemberStatuses(
       anime.memberStatuses,

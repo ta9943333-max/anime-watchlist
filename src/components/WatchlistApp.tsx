@@ -15,9 +15,9 @@ import { SearchBar } from "@/components/SearchBar";
 import { SortTabs } from "@/components/SortTabs";
 import { UserSelector } from "@/components/UserSelector";
 import {
-  applyDiscoverStatusToMemberStatuses,
+  applyDiscoverEntryToWatchlist,
+  clearDiscoverEntry,
   clearAllDiscoverStatuses,
-  clearDiscoverStatus,
 } from "@/lib/discover-status";
 import {
   addOrMergeAnime,
@@ -288,17 +288,27 @@ export function WatchlistApp() {
       let savedEntry = entry;
 
       if (currentUser) {
-        const withDiscoverStatus = applyDiscoverStatusToMemberStatuses(
+        const applied = applyDiscoverEntryToWatchlist(
           entry.memberStatuses,
+          entry.ratings,
           currentUser,
           payload.malId ?? null,
           payload.anilistId ?? null,
         );
-        if (withDiscoverStatus !== entry.memberStatuses) {
+        if (applied.changed) {
           markLocalWrite();
-          await updateMemberStatuses(entry.id, withDiscoverStatus);
-          savedEntry = { ...entry, memberStatuses: withDiscoverStatus };
-          clearDiscoverStatus(
+          if (applied.memberStatuses !== entry.memberStatuses) {
+            await updateMemberStatuses(entry.id, applied.memberStatuses);
+          }
+          if (applied.ratings !== entry.ratings) {
+            await updateRatings(entry.id, applied.ratings);
+          }
+          savedEntry = {
+            ...entry,
+            memberStatuses: applied.memberStatuses,
+            ratings: applied.ratings,
+          };
+          clearDiscoverEntry(
             currentUser,
             payload.malId ?? null,
             payload.anilistId ?? null,
@@ -974,6 +984,7 @@ export function WatchlistApp() {
             onSetMyStatus={handleSetMyStatus}
             onSetEpisodesWatched={handleSetEpisodesWatched}
             onSetRewatchCount={handleSetRewatchCount}
+            onRateAnime={handleRateAnime}
           />
         ) : (
           <>
