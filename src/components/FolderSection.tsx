@@ -20,6 +20,7 @@ type FolderSectionProps = {
   onAddAnimeToFolder: (payload: AddAnimePayload, folderId: string) => Promise<void>;
   onSetMyStatus: (animeId: string, status: AnimeStatus) => void;
   onSetEpisodesWatched: (animeId: string, episodesWatched: number) => void;
+  onSetRewatchCount: (animeId: string, rewatchCount: number) => void;
   onMoveToFolder: (animeId: string, folderId: string | null) => void;
   onRenameAnime: (animeId: string, title: string) => Promise<void>;
   onDeleteAnime: (animeId: string) => Promise<void>;
@@ -40,6 +41,7 @@ export function FolderSection({
   onAddAnimeToFolder,
   onSetMyStatus,
   onSetEpisodesWatched,
+  onSetRewatchCount,
   onMoveToFolder,
   onRenameAnime,
   onDeleteAnime,
@@ -114,6 +116,7 @@ export function FolderSection({
           currentUser={currentUser}
           onSetMyStatus={onSetMyStatus}
           onSetEpisodesWatched={onSetEpisodesWatched}
+          onSetRewatchCount={onSetRewatchCount}
           onMoveToFolder={onMoveToFolder}
           onRenameAnime={onRenameAnime}
           onDeleteAnime={onDeleteAnime}

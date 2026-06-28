@@ -4,6 +4,7 @@ import {
   getMemberStatusUpdatedAt,
   getMemberProgressEpisodes,
   getMemberProgressMinutes,
+  getMemberRewatchCount,
   STATUS_OPTIONS,
   type AnimeStatus,
 } from "@/lib/statuses";
@@ -43,10 +44,6 @@ export type AnimeRatingStats = {
   count: number;
   genres: string[];
 };
-
-function getFinishedWeight(status: ReturnType<typeof getMemberStatus>): number {
-  return status === "rewatching" ? 1.5 : status === "completed" ? 1 : 0;
-}
 
 function getPeriodStart(period: LeaderboardPeriod, now = new Date()): Date | null {
   if (period === "all") return null;
@@ -152,26 +149,26 @@ function computeMemberStats(
     const updatedAt = getMemberStatusUpdatedAt(anime.memberStatuses, memberName);
 
     if (FINISHED_STATUSES.includes(status)) {
-      const weight = getFinishedWeight(status);
-      const minutes = anime.totalDurationMin ?? progressMinutes;
-      const episodes = (anime.episodes ?? progressEpisodes) * weight;
-      const weightedMinutes = minutes * weight;
+      const times =
+        status === "rewatching"
+          ? getMemberRewatchCount(anime.memberStatuses, memberName)
+          : 1;
 
-      completedCount += weight;
-      episodesWatched += episodes;
-      totalMinutes += weightedMinutes;
+      completedCount += times;
+      episodesWatched += progressEpisodes;
+      totalMinutes += progressMinutes;
 
       for (const genre of anime.genres) {
-        genreCounts.set(genre, (genreCounts.get(genre) ?? 0) + weight);
+        genreCounts.set(genre, (genreCounts.get(genre) ?? 0) + times);
       }
 
       for (const period of periods) {
         if (!isInLeaderboardPeriod(updatedAt, period)) continue;
 
         const bucket = byPeriod[period];
-        bucket.completedCount += weight;
-        bucket.episodesWatched += episodes;
-        bucket.totalMinutes += weightedMinutes;
+        bucket.completedCount += times;
+        bucket.episodesWatched += progressEpisodes;
+        bucket.totalMinutes += progressMinutes;
         bucket.titles.push(displayTitle);
       }
       continue;
@@ -368,7 +365,15 @@ export function buildMonthlyRecap(
       );
       if (!isInMonth(updatedAt, year, month)) continue;
 
-      const weight = getFinishedWeight(status);
+      const times =
+        status === "rewatching"
+          ? getMemberRewatchCount(anime.memberStatuses, member.name)
+          : 1;
+      const progressEpisodes = getMemberProgressEpisodes(
+        anime.memberStatuses,
+        member.name,
+        anime.episodes,
+      );
       const progressMinutes = getMemberProgressMinutes(
         anime.memberStatuses,
         member.name,
@@ -376,11 +381,10 @@ export function buildMonthlyRecap(
         anime.episodeDurationMin,
         anime.totalDurationMin,
       );
-      const minutes = anime.totalDurationMin ?? progressMinutes;
 
-      completedCount += weight;
-      episodesWatched += (anime.episodes ?? 0) * weight;
-      totalMinutes += minutes * weight;
+      completedCount += times;
+      episodesWatched += progressEpisodes;
+      totalMinutes += progressMinutes;
       titles.push(getDisplayTitle(anime));
     }
 

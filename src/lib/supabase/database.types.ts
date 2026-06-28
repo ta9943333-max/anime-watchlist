@@ -25,6 +25,7 @@ export type Database = {
           genres: string[];
           id: string;
           mal_id: number | null;
+          anilist_id: number | null;
           mal_season: string | null;
           mal_status: string | null;
           mal_year: number | null;
@@ -48,6 +49,7 @@ export type Database = {
           genres?: string[];
           id?: string;
           mal_id?: number | null;
+          anilist_id?: number | null;
           mal_season?: string | null;
           mal_status?: string | null;
           mal_year?: number | null;
@@ -71,6 +73,7 @@ export type Database = {
           genres?: string[];
           id?: string;
           mal_id?: number | null;
+          anilist_id?: number | null;
           mal_season?: string | null;
           mal_status?: string | null;
           mal_year?: number | null;

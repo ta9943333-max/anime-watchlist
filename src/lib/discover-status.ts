@@ -1,7 +1,9 @@
 import {
+  getMemberStatus,
   setMemberStatus,
   statusShowsEpisodeProgress,
   type AnimeStatus,
+  type MemberStatuses,
 } from "@/lib/statuses";
 
 export type DiscoverStatusEntry = {
@@ -134,4 +136,51 @@ export function applyDiscoverStatusToMemberStatuses(
     local.status,
     local.episodesWatched,
   );
+}
+
+export type DiscoverStatusSync = {
+  animeId: string;
+  malId: number | null;
+  anilistId: number | null;
+  memberStatuses: MemberStatuses;
+};
+
+/** Anime already on the watchlist but user still has a local discover status to merge. */
+export function getDiscoverStatusSyncs(
+  animeList: {
+    id: string;
+    malId: number | null;
+    anilistId?: number | null;
+    memberStatuses: MemberStatuses;
+  }[],
+  user: string,
+): DiscoverStatusSync[] {
+  const localStatuses = loadDiscoverStatuses(user);
+  if (Object.keys(localStatuses).length === 0) return [];
+
+  const syncs: DiscoverStatusSync[] = [];
+
+  for (const anime of animeList) {
+    const key = discoverItemKey(anime.malId, anime.anilistId);
+    if (!key || !localStatuses[key]) continue;
+
+    if (getMemberStatus(anime.memberStatuses, user) !== "none") continue;
+
+    const merged = applyDiscoverStatusToMemberStatuses(
+      anime.memberStatuses,
+      user,
+      anime.malId,
+      anime.anilistId,
+    );
+    if (merged === anime.memberStatuses) continue;
+
+    syncs.push({
+      animeId: anime.id,
+      malId: anime.malId,
+      anilistId: anime.anilistId ?? null,
+      memberStatuses: merged,
+    });
+  }
+
+  return syncs;
 }

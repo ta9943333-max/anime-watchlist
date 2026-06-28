@@ -17,6 +17,7 @@ import { UserSelector } from "@/components/UserSelector";
 import {
   applyDiscoverStatusToMemberStatuses,
   clearDiscoverStatus,
+  getDiscoverStatusSyncs,
 } from "@/lib/discover-status";
 import {
   addOrMergeAnime,
@@ -58,6 +59,7 @@ import {
   isFinishedStatus,
   setMemberStatus,
   setMemberEpisodesWatched,
+  setMemberRewatchCount,
   statusShowsEpisodeProgress,
   type AnimeStatus,
 } from "@/lib/statuses";
@@ -101,6 +103,7 @@ export function WatchlistApp() {
   const [profileName, setProfileName] = useState<string | null>(null);
   const [recap, setRecap] = useState<MonthlyRecap | null>(null);
   const recapCheckedRef = useRef(false);
+  const discoverSyncInFlightRef = useRef<Set<string>>(new Set());
   const [folderSetupNeeded, setFolderSetupNeeded] = useState(false);
   const didAutoSyncRef = useRef(false);
   const skipRemoteSyncUntilRef = useRef(0);
@@ -134,6 +137,42 @@ export function WatchlistApp() {
       markRecapSeen(target.year, target.month);
     }
   }, [currentUser, isLoading, members, animeList]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const syncs = getDiscoverStatusSyncs(animeList, currentUser).filter(
+      (sync) => !discoverSyncInFlightRef.current.has(sync.animeId),
+    );
+    if (syncs.length === 0) return;
+
+    let cancelled = false;
+
+    void (async () => {
+      markLocalWrite();
+      for (const sync of syncs) {
+        if (cancelled) return;
+        discoverSyncInFlightRef.current.add(sync.animeId);
+        try {
+          await updateMemberStatuses(sync.animeId, sync.memberStatuses);
+          clearDiscoverStatus(currentUser, sync.malId, sync.anilistId);
+          setAnimeList((prev) =>
+            prev.map((anime) =>
+              anime.id === sync.animeId
+                ? { ...anime, memberStatuses: sync.memberStatuses }
+                : anime,
+            ),
+          );
+        } catch {
+          discoverSyncInFlightRef.current.delete(sync.animeId);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [animeList, currentUser]);
 
   useEffect(() => {
     void fetch("/api/access")
@@ -284,13 +323,17 @@ export function WatchlistApp() {
           entry.memberStatuses,
           currentUser,
           payload.malId ?? null,
-          null,
+          payload.anilistId ?? null,
         );
         if (withDiscoverStatus !== entry.memberStatuses) {
           markLocalWrite();
           await updateMemberStatuses(entry.id, withDiscoverStatus);
           savedEntry = { ...entry, memberStatuses: withDiscoverStatus };
-          clearDiscoverStatus(currentUser, payload.malId ?? null, null);
+          clearDiscoverStatus(
+            currentUser,
+            payload.malId ?? null,
+            payload.anilistId ?? null,
+          );
         }
       }
 
@@ -520,6 +563,43 @@ export function WatchlistApp() {
         err instanceof Error
           ? err.message
           : "Episoden-Fortschritt konnte nicht gespeichert werden.",
+      );
+    }
+  }
+
+  async function handleSetRewatchCount(animeId: string, rewatchCount: number) {
+    if (!currentUser) return;
+
+    const anime = animeList.find((entry) => entry.id === animeId);
+    if (!anime) return;
+
+    markLocalWrite();
+    const nextStatuses = setMemberRewatchCount(
+      anime.memberStatuses,
+      currentUser,
+      rewatchCount,
+    );
+    if (nextStatuses === anime.memberStatuses) return;
+
+    setAnimeList((prev) =>
+      prev.map((entry) =>
+        entry.id === animeId
+          ? { ...entry, memberStatuses: nextStatuses }
+          : entry,
+      ),
+    );
+
+    try {
+      await updateMemberStatuses(animeId, nextStatuses);
+      setError(null);
+    } catch (err) {
+      setAnimeList((prev) =>
+        prev.map((entry) => (entry.id === animeId ? anime : entry)),
+      );
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Rewatch-Anzahl konnte nicht gespeichert werden.",
       );
     }
   }
@@ -788,6 +868,7 @@ export function WatchlistApp() {
             onAdd={handleAddAnime}
             onSetMyStatus={handleSetMyStatus}
             onSetEpisodesWatched={handleSetEpisodesWatched}
+            onSetRewatchCount={handleSetRewatchCount}
           />
         ) : (
           <>
@@ -848,6 +929,7 @@ export function WatchlistApp() {
               onAddAnimeToFolder={handleAddAnimeToFolder}
               onSetMyStatus={handleSetMyStatus}
               onSetEpisodesWatched={handleSetEpisodesWatched}
+              onSetRewatchCount={handleSetRewatchCount}
               onMoveToFolder={handleMoveToFolder}
               onRenameAnime={handleRenameAnime}
               onDeleteAnime={handleDeleteAnime}
@@ -875,6 +957,7 @@ export function WatchlistApp() {
                   currentUser={currentUser}
                   onSetMyStatus={handleSetMyStatus}
                   onSetEpisodesWatched={handleSetEpisodesWatched}
+                  onSetRewatchCount={handleSetRewatchCount}
                   onMoveToFolder={handleMoveToFolder}
                   onRenameAnime={handleRenameAnime}
                   onDeleteAnime={handleDeleteAnime}

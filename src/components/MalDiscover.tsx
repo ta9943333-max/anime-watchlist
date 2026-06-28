@@ -54,6 +54,7 @@ import {
   STATUS_OPTIONS,
   getMemberStatus,
   getMemberEpisodesWatched,
+  getMemberRewatchCount,
   statusShowsEpisodeProgress,
   type AnimeStatus,
 } from "@/lib/statuses";
@@ -65,6 +66,7 @@ type MalDiscoverProps = {
   onAdd: (payload: AddAnimePayload) => Promise<void>;
   onSetMyStatus: (animeId: string, status: AnimeStatus) => void;
   onSetEpisodesWatched: (animeId: string, episodesWatched: number) => void;
+  onSetRewatchCount: (animeId: string, rewatchCount: number) => void;
 };
 
 type DiscoverView = "pick" | "search" | "all" | "airing" | "upcoming";
@@ -339,10 +341,16 @@ function sortByScore(items: DiscoverItem[]): DiscoverItem[] {
 }
 
 function dedupeByMalId(items: DiscoverItem[]): DiscoverItem[] {
-  const seen = new Map<number, DiscoverItem>();
+  const seen = new Map<string, DiscoverItem>();
   for (const item of items) {
-    if (item.malId > 0 && !seen.has(item.malId)) {
-      seen.set(item.malId, item);
+    const key =
+      item.malId > 0
+        ? `mal:${item.malId}`
+        : item.anilistId
+          ? `anilist:${item.anilistId}`
+          : null;
+    if (key && !seen.has(key)) {
+      seen.set(key, item);
     }
   }
   return [...seen.values()];
@@ -355,12 +363,16 @@ function attachWatchlistMeta(
   discoverStatuses: DiscoverStatuses = {},
 ): DiscoverItem[] {
   const byMalId = new Map<number, AnimeEntry>();
+  const byAnilistId = new Map<number, AnimeEntry>();
   for (const anime of animeList) {
     if (anime.malId) byMalId.set(anime.malId, anime);
+    if (anime.anilistId) byAnilistId.set(anime.anilistId, anime);
   }
 
   return items.map((item) => {
-    const inList = byMalId.get(item.malId);
+    const inList =
+      (item.malId > 0 ? byMalId.get(item.malId) : undefined) ??
+      (item.anilistId ? byAnilistId.get(item.anilistId) : undefined);
     const localKey =
       item.malId > 0
         ? `mal:${item.malId}`
@@ -368,16 +380,27 @@ function attachWatchlistMeta(
           ? `anilist:${item.anilistId}`
           : null;
     const local = localKey ? discoverStatuses[localKey] : null;
+    const watchlistStatus = inList
+      ? getMemberStatus(inList.memberStatuses, currentUser)
+      : "none";
+    const watchlistEpisodes = inList
+      ? getMemberEpisodesWatched(inList.memberStatuses, currentUser)
+      : null;
 
     return {
       ...item,
       watchlistId: inList?.id ?? item.watchlistId,
-      myStatus: inList
-        ? getMemberStatus(inList.memberStatuses, currentUser)
-        : (local?.status ?? item.myStatus ?? "none"),
-      myEpisodesWatched: inList
-        ? getMemberEpisodesWatched(inList.memberStatuses, currentUser)
-        : (local?.episodesWatched ?? item.myEpisodesWatched),
+      myStatus:
+        watchlistStatus !== "none"
+          ? watchlistStatus
+          : (local?.status ?? item.myStatus ?? "none"),
+      myEpisodesWatched:
+        watchlistStatus !== "none" && watchlistEpisodes != null
+          ? watchlistEpisodes
+          : (local?.episodesWatched ?? item.myEpisodesWatched),
+      myRewatchCount: inList
+        ? getMemberRewatchCount(inList.memberStatuses, currentUser)
+        : item.myRewatchCount,
       title: inList ? getDisplayTitle(inList) : item.title,
     };
   });
@@ -422,6 +445,7 @@ export function MalDiscover({
   onAdd,
   onSetMyStatus,
   onSetEpisodesWatched,
+  onSetRewatchCount,
 }: MalDiscoverProps) {
   const catalog = useAnilistCatalog();
   const [view, setView] = useState<DiscoverView>("pick");
@@ -447,7 +471,7 @@ export function MalDiscover({
 
   useEffect(() => {
     setDiscoverStatuses(loadDiscoverStatuses(currentUser));
-  }, [currentUser]);
+  }, [currentUser, animeList]);
 
   const apiResults = useMemo(() => {
     if (resultState.view !== view) return [];
@@ -459,13 +483,24 @@ export function MalDiscover({
     );
   }, [resultState, view, animeList, currentUser, discoverStatuses]);
 
-  const watchlistByMalId = useMemo(() => {
-    const map = new Map<number, AnimeEntry>();
+  const watchlistLookup = useMemo(() => {
+    const byMal = new Map<number, AnimeEntry>();
+    const byAnilist = new Map<number, AnimeEntry>();
     for (const anime of animeList) {
-      if (anime.malId) map.set(anime.malId, anime);
+      if (anime.malId) byMal.set(anime.malId, anime);
+      if (anime.anilistId) byAnilist.set(anime.anilistId, anime);
     }
-    return map;
+    return { byMal, byAnilist };
   }, [animeList]);
+
+  const findInWatchlist = useCallback(
+    (item: DiscoverItem): AnimeEntry | undefined =>
+      (item.malId > 0 ? watchlistLookup.byMal.get(item.malId) : undefined) ??
+      (item.anilistId
+        ? watchlistLookup.byAnilist.get(item.anilistId)
+        : undefined),
+    [watchlistLookup],
+  );
 
   const catalogWithMeta = useMemo(() => {
     let items = catalog.items;
@@ -819,7 +854,7 @@ export function MalDiscover({
   );
 
   function renderDiscoverCard(result: DiscoverItem) {
-    const inList = watchlistByMalId.get(result.malId);
+    const inList = findInWatchlist(result);
 
     return (
       <DiscoverAnimeCard
@@ -831,6 +866,7 @@ export function MalDiscover({
         onAdd={() => void handleAdd(result)}
         onSetMyStatus={onSetMyStatus}
         onSetEpisodesWatched={onSetEpisodesWatched}
+        onSetRewatchCount={onSetRewatchCount}
         onSetPersonalStatus={(status) => handlePersonalStatus(result, status)}
         onSetPersonalEpisodes={(episodes) =>
           handlePersonalEpisodes(result, episodes)

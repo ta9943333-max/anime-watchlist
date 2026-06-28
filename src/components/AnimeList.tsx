@@ -11,6 +11,7 @@ type AnimeListProps = {
   currentUser: string;
   onSetMyStatus: (animeId: string, status: AnimeStatus) => void;
   onSetEpisodesWatched: (animeId: string, episodesWatched: number) => void;
+  onSetRewatchCount: (animeId: string, rewatchCount: number) => void;
   onMoveToFolder: (animeId: string, folderId: string | null) => void;
   onRenameAnime: (animeId: string, title: string) => Promise<void>;
   onDeleteAnime: (animeId: string) => Promise<void>;
@@ -26,6 +27,7 @@ export function AnimeList({
   currentUser,
   onSetMyStatus,
   onSetEpisodesWatched,
+  onSetRewatchCount,
   onMoveToFolder,
   onRenameAnime,
   onDeleteAnime,
@@ -53,6 +55,7 @@ export function AnimeList({
           currentUser={currentUser}
           onSetMyStatus={onSetMyStatus}
           onSetEpisodesWatched={onSetEpisodesWatched}
+          onSetRewatchCount={onSetRewatchCount}
           onMoveToFolder={onMoveToFolder}
           onRenameAnime={onRenameAnime}
           onDeleteAnime={onDeleteAnime}

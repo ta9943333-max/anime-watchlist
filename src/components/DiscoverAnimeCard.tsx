@@ -3,6 +3,7 @@
 import { Loader2, Plus } from "lucide-react";
 import { AnimeLiveChartCard } from "@/components/AnimeLiveChartCard";
 import { EpisodeProgressField } from "@/components/EpisodeProgressField";
+import { RewatchCountField } from "@/components/RewatchCountField";
 import { StatusBadge } from "@/components/StatusBadge";
 import {
   STATUS_OPTIONS,
@@ -19,6 +20,7 @@ type DiscoverAnimeCardProps = {
   allowPersonalStatus?: boolean;
   onSetMyStatus?: (animeId: string, status: AnimeStatus) => void;
   onSetEpisodesWatched?: (animeId: string, episodesWatched: number) => void;
+  onSetRewatchCount?: (animeId: string, rewatchCount: number) => void;
   onSetPersonalStatus?: (status: AnimeStatus) => void;
   onSetPersonalEpisodes?: (episodesWatched: number) => void;
 };
@@ -31,6 +33,7 @@ export function DiscoverAnimeCard({
   allowPersonalStatus = false,
   onSetMyStatus,
   onSetEpisodesWatched,
+  onSetRewatchCount,
   onSetPersonalStatus,
   onSetPersonalEpisodes,
 }: DiscoverAnimeCardProps) {
@@ -39,6 +42,10 @@ export function DiscoverAnimeCard({
     statusShowsEpisodeProgress(myStatus) && anime.myEpisodesWatched != null
       ? anime.myEpisodesWatched
       : 0;
+  const myRewatchCount =
+    anime.myRewatchCount != null && anime.myRewatchCount >= 1
+      ? anime.myRewatchCount
+      : 1;
 
   const accentClassName =
     myStatus !== "none" ? "ring-1 ring-violet-500/20" : undefined;
@@ -66,6 +73,12 @@ export function DiscoverAnimeCard({
     }
     if (showPersonalStatus && onSetPersonalEpisodes) {
       onSetPersonalEpisodes(value);
+    }
+  }
+
+  function handleRewatchChange(value: number) {
+    if (showWatchlistStatus && anime.watchlistId && onSetRewatchCount) {
+      onSetRewatchCount(anime.watchlistId, value);
     }
   }
 
@@ -113,6 +126,15 @@ export function DiscoverAnimeCard({
               compact
               onEpisodesWatchedChange={handleEpisodesChange}
             />
+            {showWatchlistStatus && (
+              <RewatchCountField
+                status={myStatus}
+                rewatchCount={myRewatchCount}
+                totalEpisodes={anime.episodes}
+                compact
+                onRewatchCountChange={handleRewatchChange}
+              />
+            )}
           </div>
         ) : undefined
       }

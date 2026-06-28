@@ -8,6 +8,7 @@ export function animeEntryToDiscoverItem(
 ): DiscoverItem {
   return {
     malId: anime.malId ?? 0,
+    anilistId: anime.anilistId ?? undefined,
     title: getDisplayTitle(anime),
     titleEnglish: anime.titleEnglish,
     seriesKey: anime.seriesKey ?? "",
@@ -44,6 +45,7 @@ export function addPayloadFromDiscoverItem(
     seriesKey: item.seriesKey,
     malStatus: item.malStatus,
     malId: item.malId || null,
+    anilistId: item.anilistId ?? null,
     episodes: item.episodes,
     episodeDurationMin: item.episodeDurationMin,
     totalDurationMin: item.totalDurationMin,

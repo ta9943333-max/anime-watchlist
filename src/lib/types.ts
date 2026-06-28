@@ -34,6 +34,7 @@ export type AnimeEntry = {
   folderId: string | null;
   createdAt: string;
   malId: number | null;
+  anilistId: number | null;
   episodes: number | null;
   episodeDurationMin: number | null;
   totalDurationMin: number | null;
@@ -73,6 +74,7 @@ export type AddAnimePayload = {
   malStatus?: string | null;
   folderId?: string | null;
   malId?: number | null;
+  anilistId?: number | null;
   episodes?: number | null;
   episodeDurationMin?: number | null;
   totalDurationMin?: number | null;

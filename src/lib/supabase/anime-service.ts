@@ -60,6 +60,7 @@ function mapRow(row: AnimeRow): AnimeEntry {
     folderId: row.folder_id ?? null,
     createdAt: row.created_at,
     malId: row.mal_id ?? null,
+    anilistId: row.anilist_id ?? null,
     episodes: row.episodes ?? null,
     episodeDurationMin: row.episode_duration_min ?? null,
     totalDurationMin: row.total_duration_min ?? null,
@@ -105,6 +106,7 @@ export async function addAnime(payload: AddAnimePayload): Promise<AnimeEntry> {
       member_statuses: {},
       folder_id: payload.folderId ?? null,
       mal_id: payload.malId ?? null,
+      anilist_id: payload.anilistId ?? null,
       episodes: payload.episodes ?? null,
       episode_duration_min: payload.episodeDurationMin ?? null,
       total_duration_min: payload.totalDurationMin ?? null,
@@ -171,6 +173,15 @@ export async function addOrMergeAnime(
     );
     if (duplicateMal) {
       return { entry: duplicateMal, merged: false };
+    }
+  }
+
+  if (payload.anilistId) {
+    const duplicateAnilist = existingList.find(
+      (anime) => anime.anilistId === payload.anilistId,
+    );
+    if (duplicateAnilist) {
+      return { entry: duplicateAnilist, merged: false };
     }
   }
 

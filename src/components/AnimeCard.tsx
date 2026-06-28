@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { AnimeLiveChartCard } from "@/components/AnimeLiveChartCard";
 import { EpisodeProgressField } from "@/components/EpisodeProgressField";
+import { RewatchCountField } from "@/components/RewatchCountField";
 import { ProgressBar } from "@/components/ProgressBar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { fetchMalAnimeDetails } from "@/lib/mal/jikan";
@@ -18,6 +19,7 @@ import {
   countFinishedMembers,
   getMemberStatus,
   getMemberEpisodesWatched,
+  getMemberRewatchCount,
   isFinishedStatus,
   STATUS_OPTIONS,
   type AnimeStatus,
@@ -38,6 +40,7 @@ type AnimeCardProps = {
   currentUser: string;
   onSetMyStatus: (animeId: string, status: AnimeStatus) => void;
   onSetEpisodesWatched: (animeId: string, episodesWatched: number) => void;
+  onSetRewatchCount: (animeId: string, rewatchCount: number) => void;
   onMoveToFolder: (animeId: string, folderId: string | null) => void;
   onRenameAnime: (animeId: string, title: string) => Promise<void>;
   onDeleteAnime: (animeId: string) => Promise<void>;
@@ -54,6 +57,7 @@ export function AnimeCard({
   currentUser,
   onSetMyStatus,
   onSetEpisodesWatched,
+  onSetRewatchCount,
   onMoveToFolder,
   onRenameAnime,
   onDeleteAnime,
@@ -78,6 +82,7 @@ export function AnimeCard({
   const myStatus = getMemberStatus(anime.memberStatuses, currentUser);
   const myEpisodesWatched =
     getMemberEpisodesWatched(anime.memberStatuses, currentUser) ?? 0;
+  const myRewatchCount = getMemberRewatchCount(anime.memberStatuses, currentUser);
   const otherMembers = sortedMembers.filter((m) => m.name !== currentUser);
   const myRating = anime.ratings[currentUser] ?? 0;
   const { average, count } = getAverageRating(anime.ratings);
@@ -269,6 +274,15 @@ export function AnimeCard({
                 compact
                 onEpisodesWatchedChange={(value) =>
                   onSetEpisodesWatched(anime.id, value)
+                }
+              />
+              <RewatchCountField
+                status={myStatus}
+                rewatchCount={myRewatchCount}
+                totalEpisodes={anime.episodes}
+                compact
+                onRewatchCountChange={(value) =>
+                  onSetRewatchCount(anime.id, value)
                 }
               />
             </div>

@@ -13,19 +13,23 @@ export type MemberStatusEntry = {
   status: AnimeStatus;
   updatedAt: string;
   episodesWatched?: number;
+  rewatchCount?: number;
 };
 
 export const EPISODE_PROGRESS_STATUSES: AnimeStatus[] = [
   "watching",
   "dropped",
   "paused",
-  "rewatching",
   "considering",
   "planning",
 ];
 
 export function statusShowsEpisodeProgress(status: AnimeStatus): boolean {
   return EPISODE_PROGRESS_STATUSES.includes(status);
+}
+
+export function statusShowsRewatchCount(status: AnimeStatus): boolean {
+  return status === "rewatching";
 }
 
 export type MemberStatuses = Record<string, MemberStatusEntry>;
@@ -108,6 +112,7 @@ export function normalizeMemberStatuses(raw: unknown): MemberStatuses {
         status?: string;
         updatedAt?: string;
         episodesWatched?: number;
+        rewatchCount?: number;
       };
       if (entry.status && isValidStatus(entry.status) && entry.status !== "none") {
         const normalized: MemberStatusEntry = {
@@ -119,6 +124,12 @@ export function normalizeMemberStatuses(raw: unknown): MemberStatuses {
           entry.episodesWatched >= 0
         ) {
           normalized.episodesWatched = entry.episodesWatched;
+        }
+        if (
+          typeof entry.rewatchCount === "number" &&
+          entry.rewatchCount >= 1
+        ) {
+          normalized.rewatchCount = Math.floor(entry.rewatchCount);
         }
         result[name] = normalized;
       }
@@ -150,6 +161,14 @@ export function getMemberEpisodesWatched(
   return typeof value === "number" && value >= 0 ? value : null;
 }
 
+export function getMemberRewatchCount(
+  statuses: MemberStatuses,
+  memberName: string,
+): number {
+  const value = statuses[memberName]?.rewatchCount;
+  return typeof value === "number" && value >= 1 ? Math.floor(value) : 1;
+}
+
 export function setMemberStatus(
   statuses: MemberStatuses,
   memberName: string,
@@ -161,12 +180,12 @@ export function setMemberStatus(
   if (status === "none") {
     delete next[memberName];
   } else {
+    const previous = statuses[memberName];
     const entry: MemberStatusEntry = {
       status,
       updatedAt: new Date().toISOString(),
     };
     if (statusShowsEpisodeProgress(status)) {
-      const previous = statuses[memberName];
       const resolved =
         episodesWatched != null
           ? episodesWatched
@@ -176,6 +195,9 @@ export function setMemberStatus(
       if (resolved != null && resolved >= 0) {
         entry.episodesWatched = resolved;
       }
+    }
+    if (statusShowsRewatchCount(status)) {
+      entry.rewatchCount = Math.max(1, previous?.rewatchCount ?? 1);
     }
     next[memberName] = entry;
   }
@@ -203,6 +225,26 @@ export function setMemberEpisodesWatched(
   };
 }
 
+export function setMemberRewatchCount(
+  statuses: MemberStatuses,
+  memberName: string,
+  rewatchCount: number,
+): MemberStatuses {
+  const current = statuses[memberName];
+  if (!current || !statusShowsRewatchCount(current.status)) {
+    return statuses;
+  }
+
+  return {
+    ...statuses,
+    [memberName]: {
+      ...current,
+      rewatchCount: Math.max(1, Math.floor(rewatchCount)),
+      updatedAt: new Date().toISOString(),
+    },
+  };
+}
+
 export function getMemberProgressEpisodes(
   statuses: MemberStatuses,
   memberName: string,
@@ -210,6 +252,10 @@ export function getMemberProgressEpisodes(
 ): number {
   const status = getMemberStatus(statuses, memberName);
   const total = totalEpisodes ?? 0;
+
+  if (status === "rewatching") {
+    return total * getMemberRewatchCount(statuses, memberName);
+  }
 
   if (FINISHED_STATUSES.includes(status)) {
     return total;
