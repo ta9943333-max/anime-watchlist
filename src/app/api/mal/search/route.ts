@@ -3,9 +3,9 @@ import { searchAnilistAnime } from "@/lib/anilist/search";
 import { mapJikanAnime, type JikanAnime } from "@/lib/mal/map-anime";
 import { rankSearchResults } from "@/lib/mal/search-rank";
 
-const SEARCH_LIMIT = 100;
+const SEARCH_LIMIT = 150;
 const JIKAN_PAGE_SIZE = 25;
-const JIKAN_PAGES = 2;
+const JIKAN_PAGES = 3;
 
 async function fetchJikanSearchPage(
   query: string,

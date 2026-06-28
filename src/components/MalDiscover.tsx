@@ -37,7 +37,6 @@ import {
 } from "@/lib/anilist/catalog-store";
 import { useAnilistCatalog } from "@/lib/anilist/use-anilist-catalog";
 import {
-  fetchMalSeason,
   fetchMalTop,
   hydrateDiscoverImages,
   searchMalAnime,
@@ -93,14 +92,14 @@ const VIEW_META: Record<
     label: "Search",
     title: "Search all anime",
     description:
-      "Browse popular anime or search MyAnimeList — add to your watchlist or set a status directly.",
+      "Durchsucht den kompletten AniList-Katalog und MyAnimeList — bis zu 200 Treffer.",
     icon: Search,
   },
   all: {
     label: "All Anime",
     title: "All anime on AniList",
     description:
-      "Browse the complete AniList catalog — loaded once and cached globally. Mark Completed or Watching to update your stats.",
+      "Der komplette AniList-Katalog (~20.000 Anime) — einmal laden, lokal cachen, blitzschnell filtern.",
     icon: Globe2,
   },
   airing: {
@@ -138,7 +137,9 @@ const PICK_MODE_META: Record<
   },
 };
 
-const CATALOG_PAGE_SIZE = 25;
+const CATALOG_PAGE_SIZE = 36;
+
+type CatalogSort = "score" | "title" | "airdate";
 
 function discoverItemKey(item: DiscoverItem): string {
   return String(item.anilistId ?? item.malId);
@@ -340,6 +341,46 @@ function sortByScore(items: DiscoverItem[]): DiscoverItem[] {
   return [...items].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 }
 
+function sortByTitle(items: DiscoverItem[]): DiscoverItem[] {
+  return [...items].sort((a, b) =>
+    a.title.localeCompare(b.title, "de", { sensitivity: "base" }),
+  );
+}
+
+function sortByAirdate(items: DiscoverItem[]): DiscoverItem[] {
+  return [...items].sort((a, b) => {
+    const aTime = a.airedFrom ? new Date(a.airedFrom).getTime() : 0;
+    const bTime = b.airedFrom ? new Date(b.airedFrom).getTime() : 0;
+    if (aTime !== bTime) return bTime - aTime;
+    return a.title.localeCompare(b.title, "de", { sensitivity: "base" });
+  });
+}
+
+function resolveUserStatus(
+  item: DiscoverItem,
+  byMal: Map<number, AnimeEntry>,
+  byAnilist: Map<number, AnimeEntry>,
+  currentUser: string,
+  discoverStatuses: DiscoverStatuses,
+): AnimeStatus {
+  const inList =
+    (item.malId > 0 ? byMal.get(item.malId) : undefined) ??
+    (item.anilistId ? byAnilist.get(item.anilistId) : undefined);
+  if (inList) {
+    return getMemberStatus(inList.memberStatuses, currentUser);
+  }
+  const localKey =
+    item.malId > 0
+      ? `mal:${item.malId}`
+      : item.anilistId
+        ? `anilist:${item.anilistId}`
+        : null;
+  if (localKey && discoverStatuses[localKey]) {
+    return discoverStatuses[localKey].status;
+  }
+  return "none";
+}
+
 function dedupeByMalId(items: DiscoverItem[]): DiscoverItem[] {
   const seen = new Map<string, DiscoverItem>();
   for (const item of items) {
@@ -462,6 +503,8 @@ export function MalDiscover({
   const [addingId, setAddingId] = useState<number | null>(null);
   const [genreFilter, setGenreFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [catalogSort, setCatalogSort] = useState<CatalogSort>("score");
+  const [hideFinished, setHideFinished] = useState(false);
   const [discoverStatuses, setDiscoverStatuses] = useState<DiscoverStatuses>(() =>
     loadDiscoverStatuses(currentUser),
   );
@@ -502,7 +545,7 @@ export function MalDiscover({
     [watchlistLookup],
   );
 
-  const catalogWithMeta = useMemo(() => {
+  const catalogBaseItems = useMemo(() => {
     let items = catalog.items;
     if (view === "airing") {
       items = items.filter((item) =>
@@ -523,22 +566,94 @@ export function MalDiscover({
       const { year } = getCurrentSeason();
       items = items.filter((item) => item.malYear === year);
     }
-    return attachWatchlistMeta(
-      items,
-      animeList,
-      currentUser,
-      discoverStatuses,
-    );
-  }, [catalog.items, view, pickMode, animeList, currentUser, discoverStatuses]);
+    return items;
+  }, [catalog.items, view, pickMode]);
 
   const hasListFilters = Boolean(
     genreFilter ||
       statusFilter !== "all" ||
+      hideFinished ||
       (searchQuery.trim() && view !== "search"),
   );
 
+  const catalogFilteredItems = useMemo(() => {
+    if (!viewUsesCatalog(view, pickMode)) return [];
+
+    let list: DiscoverItem[] = catalogBaseItems;
+    const { byMal, byAnilist } = watchlistLookup;
+
+    if (genreFilter) {
+      list = list.filter((result) =>
+        result.genres.some(
+          (genre) => genre.toLowerCase() === genreFilter.toLowerCase(),
+        ),
+      );
+    }
+
+    if (hideFinished) {
+      list = list.filter((item) => {
+        const status = resolveUserStatus(
+          item,
+          byMal,
+          byAnilist,
+          currentUser,
+          discoverStatuses,
+        );
+        return status !== "completed" && status !== "rewatching";
+      });
+    }
+
+    if (statusFilter !== "all") {
+      list = list.filter(
+        (item) =>
+          resolveUserStatus(
+            item,
+            byMal,
+            byAnilist,
+            currentUser,
+            discoverStatuses,
+          ) === statusFilter,
+      );
+    }
+
+    const query = searchQuery.trim().toLowerCase();
+    if (query && view !== "search") {
+      list = list.filter((result) =>
+        result.title.toLowerCase().includes(query),
+      );
+    }
+
+    if (view === "airing" || view === "upcoming") {
+      return sortByCountdown(list);
+    }
+
+    if (view === "pick" && pickMode !== "lucky") {
+      return sortByScore(list);
+    }
+
+    if (catalogSort === "title") return sortByTitle(list);
+    if (catalogSort === "airdate") return sortByAirdate(list);
+    return sortByScore(list);
+  }, [
+    catalogBaseItems,
+    view,
+    pickMode,
+    genreFilter,
+    statusFilter,
+    hideFinished,
+    searchQuery,
+    catalogSort,
+    watchlistLookup,
+    currentUser,
+    discoverStatuses,
+  ]);
+
   const filteredBeforePage = useMemo(() => {
-    let list = viewUsesCatalog(view, pickMode) ? catalogWithMeta : apiResults;
+    if (viewUsesCatalog(view, pickMode)) {
+      return catalogFilteredItems;
+    }
+
+    let list = apiResults;
 
     if (genreFilter) {
       list = list.filter((result) =>
@@ -550,6 +665,13 @@ export function MalDiscover({
 
     if (statusFilter !== "all") {
       list = list.filter((result) => result.myStatus === statusFilter);
+    }
+
+    if (hideFinished) {
+      list = list.filter(
+        (result) =>
+          result.myStatus !== "completed" && result.myStatus !== "rewatching",
+      );
     }
 
     const query = searchQuery.trim().toLowerCase();
@@ -569,12 +691,13 @@ export function MalDiscover({
 
     return list;
   }, [
-    catalogWithMeta,
+    catalogFilteredItems,
     apiResults,
     view,
     pickMode,
     genreFilter,
     statusFilter,
+    hideFinished,
     searchQuery,
   ]);
 
@@ -674,10 +797,10 @@ export function MalDiscover({
         if (activeView === "search") {
           if (debouncedQuery.length >= 2) {
             const found = await searchMalAnime(debouncedQuery);
-            const fromCatalog = searchCatalogItems(debouncedQuery, 200);
+            const fromCatalog = searchCatalogItems(debouncedQuery, 500);
             let items = dedupeByMalId(
               rankSearchResults(debouncedQuery, [...fromCatalog, ...found]),
-            ).slice(0, 100);
+            ).slice(0, 200);
             items = await enrichItems(items);
             if (seq !== loadSeqRef.current) return;
             setResultState({
@@ -716,34 +839,6 @@ export function MalDiscover({
           });
           return;
         }
-
-        const seasonFilter = activeView === "airing" ? "now" : "upcoming";
-        const seasonItems = await fetchMalSeason(seasonFilter);
-
-        let items: DiscoverItem[] = seasonItems.filter((item) =>
-          activeView === "airing"
-            ? item.malStatus === "Currently Airing"
-            : item.malStatus === "Not yet aired",
-        );
-
-        items = dedupeByMalId(items);
-        items = await enrichItems(items);
-
-        if (activeView === "airing") {
-          items = items.filter((item) =>
-            isCurrentlyAiring(releaseFieldsFromAnime(item)),
-          );
-        } else {
-          items = items.filter((item) =>
-            isTrulyUpcoming(releaseFieldsFromAnime(item)),
-          );
-        }
-
-        if (seq !== loadSeqRef.current) return;
-        setResultState({
-          view: activeView,
-          items,
-        });
       } catch {
         if (seq !== loadSeqRef.current) return;
         setResultState({ view: activeView, items: [] });
@@ -762,19 +857,14 @@ export function MalDiscover({
     setIsLoading(catalog.items.length === 0 && catalog.status === "loading");
   }, [view, pickMode, catalog.items.length, catalog.status]);
 
-  useEffect(() => {
-    if (viewUsesCatalog(view, pickMode)) {
-      sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [catalogPage, view, pickMode]);
-
   const sourceResults = viewUsesCatalog(view, pickMode)
-    ? catalogWithMeta
+    ? catalogBaseItems
     : apiResults;
 
   const genres = useMemo(() => {
     const set = new Set<string>();
-    for (const result of sourceResults) {
+    const sample = sourceResults.slice(0, 2500);
+    for (const result of sample) {
       for (const genre of result.genres) {
         set.add(genre);
       }
@@ -784,10 +874,28 @@ export function MalDiscover({
 
   const filteredResults = useMemo(() => {
     if (viewUsesCatalog(view, pickMode)) {
-      return paginateList(filteredBeforePage, catalogPage, CATALOG_PAGE_SIZE);
+      const pageItems = paginateList(
+        filteredBeforePage,
+        catalogPage,
+        CATALOG_PAGE_SIZE,
+      );
+      return attachWatchlistMeta(
+        pageItems,
+        animeList,
+        currentUser,
+        discoverStatuses,
+      );
     }
     return filteredBeforePage;
-  }, [filteredBeforePage, view, pickMode, catalogPage]);
+  }, [
+    filteredBeforePage,
+    view,
+    pickMode,
+    catalogPage,
+    animeList,
+    currentUser,
+    discoverStatuses,
+  ]);
 
   const catalogIsLoading =
     catalog.status === "loading" || catalog.status === "idle";
@@ -906,6 +1014,7 @@ export function MalDiscover({
                 setIsLoading(true);
                 setGenreFilter(null);
                 setStatusFilter("all");
+                setHideFinished(false);
                 setCatalogPage(1);
                 if (key !== "search") setSearchQuery("");
               }}
@@ -972,11 +1081,66 @@ export function MalDiscover({
         </div>
       )}
 
+      {!showLucky && viewUsesCatalog(view, pickMode) && (
+        <div className="space-y-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            Sortierung
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                ["score", "Bewertung"],
+                ["title", "Titel"],
+                ["airdate", "Startdatum"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => {
+                  setCatalogSort(value);
+                  setCatalogPage(1);
+                }}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                  catalogSort === value
+                    ? "bg-emerald-600 text-white"
+                    : "bg-slate-800/80 text-slate-400 hover:text-white"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {!showLucky && (
         <>
           <div className="space-y-3">
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              Your status
+              Mark Filter
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setHideFinished((value) => !value);
+                  setCatalogPage(1);
+                }}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                  hideFinished
+                    ? "bg-rose-600 text-white"
+                    : "bg-slate-800/80 text-slate-400 hover:text-white"
+                }`}
+              >
+                Abgeschlossene ausblenden
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Dein Status
             </p>
             <div className="flex flex-wrap gap-2">
               <button

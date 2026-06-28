@@ -16,8 +16,8 @@ import { SortTabs } from "@/components/SortTabs";
 import { UserSelector } from "@/components/UserSelector";
 import {
   applyDiscoverStatusToMemberStatuses,
+  clearAllDiscoverStatuses,
   clearDiscoverStatus,
-  getDiscoverStatusSyncs,
 } from "@/lib/discover-status";
 import {
   addOrMergeAnime,
@@ -110,7 +110,6 @@ export function WatchlistApp() {
   const [profileName, setProfileName] = useState<string | null>(null);
   const [recap, setRecap] = useState<MonthlyRecap | null>(null);
   const recapCheckedRef = useRef(false);
-  const discoverSyncInFlightRef = useRef<Set<string>>(new Set());
   const [folderSetupNeeded, setFolderSetupNeeded] = useState(false);
   const skipRemoteSyncUntilRef = useRef(0);
 
@@ -143,42 +142,6 @@ export function WatchlistApp() {
       markRecapSeen(target.year, target.month);
     }
   }, [currentUser, isLoading, members, animeList]);
-
-  useEffect(() => {
-    if (!currentUser) return;
-
-    const syncs = getDiscoverStatusSyncs(animeList, currentUser).filter(
-      (sync) => !discoverSyncInFlightRef.current.has(sync.animeId),
-    );
-    if (syncs.length === 0) return;
-
-    let cancelled = false;
-
-    void (async () => {
-      markLocalWrite();
-      for (const sync of syncs) {
-        if (cancelled) return;
-        discoverSyncInFlightRef.current.add(sync.animeId);
-        try {
-          await updateMemberStatuses(sync.animeId, sync.memberStatuses);
-          clearDiscoverStatus(currentUser, sync.malId, sync.anilistId);
-          setAnimeList((prev) =>
-            prev.map((anime) =>
-              anime.id === sync.animeId
-                ? { ...anime, memberStatuses: sync.memberStatuses }
-                : anime,
-            ),
-          );
-        } catch {
-          discoverSyncInFlightRef.current.delete(sync.animeId);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [animeList, currentUser]);
 
   useEffect(() => {
     void fetch("/api/access")
@@ -227,6 +190,7 @@ export function WatchlistApp() {
           )
         ) {
           clearLocalProgressCache();
+          if (currentUser) clearAllDiscoverStatuses(currentUser);
         }
         try {
           markLocalWrite();
@@ -400,6 +364,7 @@ export function WatchlistApp() {
       markLocalWrite();
       const count = await resetAllWatchProgress();
       clearLocalProgressCache();
+      if (currentUser) clearAllDiscoverStatuses(currentUser);
       recapCheckedRef.current = false;
       setRecap(null);
       const list = await fetchAnimeList();

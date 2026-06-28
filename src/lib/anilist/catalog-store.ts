@@ -24,8 +24,9 @@ export type AnilistCatalogState = {
   error: string | null;
 };
 
-const PAGE_DELAY_MS = 200;
-const PAGE_BATCH_SIZE = 5;
+const PAGE_DELAY_MS = 120;
+const PAGE_BATCH_SIZE = 8;
+const PERSIST_EVERY_BATCHES = 4;
 
 let state: AnilistCatalogState = {
   items: [],
@@ -143,6 +144,9 @@ async function loadAllPages(startPage = 1, initialItems: DiscoverItem[] = []) {
     const lastLoadedPage = batchPages[batchPages.length - 1] ?? page;
     const deduped = dedupeByAnilistId(collected);
     const complete = lastLoadedPage >= totalPages;
+    const batchIndex = Math.floor((lastLoadedPage - 1) / PAGE_BATCH_SIZE);
+    const shouldPersist =
+      complete || batchIndex % PERSIST_EVERY_BATCHES === 0;
 
     setState({
       items: deduped,
@@ -152,13 +156,15 @@ async function loadAllPages(startPage = 1, initialItems: DiscoverItem[] = []) {
       status: complete ? "ready" : "loading",
     });
 
-    await persistCatalog(
-      deduped,
-      lastLoadedPage,
-      totalPages,
-      totalItems,
-      complete,
-    );
+    if (shouldPersist) {
+      await persistCatalog(
+        deduped,
+        lastLoadedPage,
+        totalPages,
+        totalItems,
+        complete,
+      );
+    }
 
     page = lastLoadedPage + 1;
 
@@ -258,7 +264,7 @@ export function pickRandomCatalogItem(): DiscoverItem | null {
 
 export function searchCatalogItems(
   query: string,
-  limit = 200,
+  limit = 500,
 ): DiscoverItem[] {
   const trimmed = query.trim();
   if (trimmed.length < 2 || state.items.length === 0) return [];

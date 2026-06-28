@@ -121,6 +121,11 @@ export function clearDiscoverStatus(
   return setDiscoverStatus(user, malId, anilistId, "none");
 }
 
+export function clearAllDiscoverStatuses(user: string): void {
+  if (typeof window === "undefined" || !user.trim()) return;
+  localStorage.removeItem(storageKey(user));
+}
+
 export function applyDiscoverStatusToMemberStatuses(
   memberStatuses: Parameters<typeof setMemberStatus>[0],
   user: string,
