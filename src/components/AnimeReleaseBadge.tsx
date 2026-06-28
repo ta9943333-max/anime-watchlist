@@ -5,7 +5,7 @@ import { CalendarClock } from "lucide-react";
 import {
   formatAnimeRelease,
   formatCountdown,
-  getPremiereDate,
+  getCountdownTarget,
   isUpcomingRelease,
   type AnimeReleaseFields,
 } from "@/lib/mal/release-date";
@@ -22,9 +22,9 @@ export function AnimeReleaseBadge({
   compact = false,
 }: AnimeReleaseBadgeProps) {
   const label = formatAnimeRelease(info);
-  const premiere = getPremiereDate(info);
+  const countdownTarget = getCountdownTarget(info);
   const upcoming = isUpcomingRelease(info);
-  const shouldCountdown = Boolean(premiere && showCountdown && upcoming);
+  const shouldCountdown = Boolean(countdownTarget && showCountdown);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -34,8 +34,8 @@ export function AnimeReleaseBadge({
   }, [shouldCountdown]);
 
   const countdown =
-    shouldCountdown && premiere
-      ? formatCountdown(premiere, new Date(now))
+    shouldCountdown && countdownTarget
+      ? formatCountdown(countdownTarget.date, new Date(now))
       : null;
 
   if (!label && !countdown) {

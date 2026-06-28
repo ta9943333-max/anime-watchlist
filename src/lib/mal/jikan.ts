@@ -15,6 +15,9 @@ export type MalSearchResult = {
   broadcastTime: string | null;
   malSeason: string | null;
   malYear: number | null;
+  synopsis: string | null;
+  studios: string[];
+  score: number | null;
 };
 
 export function parseMalDuration(

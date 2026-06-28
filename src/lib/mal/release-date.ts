@@ -73,8 +73,102 @@ export function formatShortDate(date: Date): string {
 }
 
 export function getPremiereDate(info: AnimeReleaseFields): Date | null {
-  if (!info.airedFrom) return null;
-  return parseBroadcastDateTime(info.airedFrom, info.broadcastTime);
+  if (info.airedFrom) {
+    return parseBroadcastDateTime(info.airedFrom, info.broadcastTime);
+  }
+  return getEstimatedSeasonStart(info.malSeason, info.malYear);
+}
+
+export function getEstimatedSeasonStart(
+  season: string | null,
+  year: number | null,
+): Date | null {
+  if (!season || !year) return null;
+
+  const months: Record<string, number> = {
+    winter: 1,
+    spring: 4,
+    summer: 7,
+    fall: 10,
+  };
+  const month = months[season.toLowerCase()];
+  if (!month) return null;
+
+  return new Date(
+    `${year}-${String(month).padStart(2, "0")}-01T00:00:00+09:00`,
+  );
+}
+
+function normalizeDayName(day: string): string {
+  return day.toLowerCase().replace(/s$/, "");
+}
+
+function getJstDateParts(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: JST_TZ,
+    weekday: "long",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  return {
+    weekday: parts.find((part) => part.type === "weekday")?.value ?? "",
+    year: parts.find((part) => part.type === "year")?.value ?? "",
+    month: parts.find((part) => part.type === "month")?.value ?? "",
+    day: parts.find((part) => part.type === "day")?.value ?? "",
+  };
+}
+
+export function getNextBroadcastDate(
+  info: AnimeReleaseFields,
+  now = new Date(),
+): Date | null {
+  if (!info.broadcastDay || !info.broadcastTime) return null;
+
+  const targetDay = normalizeDayName(info.broadcastDay);
+  const [hours, minutes] = info.broadcastTime.split(":").map(Number);
+
+  for (let offset = 0; offset <= 14; offset += 1) {
+    const probe = new Date(now.getTime() + offset * 86_400_000);
+    const parts = getJstDateParts(probe);
+    if (normalizeDayName(parts.weekday) !== targetDay) continue;
+
+    const jstIso = `${parts.year}-${parts.month}-${parts.day}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00+09:00`;
+    const broadcast = new Date(jstIso);
+    if (broadcast > now) return broadcast;
+  }
+
+  return null;
+}
+
+export function getCountdownTarget(
+  info: AnimeReleaseFields,
+  now = new Date(),
+): { date: Date; label: string } | null {
+  if (info.malStatus === "Currently Airing") {
+    const nextBroadcast = getNextBroadcastDate(info, now);
+    if (nextBroadcast) {
+      return { date: nextBroadcast, label: "Next ep · TV (JP)" };
+    }
+  }
+
+  const premiere = info.airedFrom
+    ? parseBroadcastDateTime(info.airedFrom, info.broadcastTime)
+    : null;
+
+  if (premiere && premiere > now) {
+    return { date: premiere, label: "Premiere · TV (JP)" };
+  }
+
+  if (info.malStatus === "Not yet aired") {
+    const estimated = getEstimatedSeasonStart(info.malSeason, info.malYear);
+    if (estimated && estimated > now) {
+      return { date: estimated, label: "Est. premiere" };
+    }
+  }
+
+  return null;
 }
 
 export function getCountdownParts(target: Date, now = new Date()): {
@@ -142,7 +236,7 @@ export function formatAnimeRelease(info: AnimeReleaseFields): string | null {
   }
 
   if (seasonLabel && info.malStatus === "Not yet aired") {
-    return seasonLabel;
+    return `Expected ${seasonLabel}`;
   }
 
   if (seasonLabel) {

@@ -524,7 +524,11 @@ export function WatchlistApp() {
         <div className="absolute -right-32 bottom-0 h-96 w-96 rounded-full bg-emerald-500/10 blur-3xl" />
       </div>
 
-      <div className="relative mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
+      <div
+        className={`relative mx-auto px-4 py-8 sm:px-6 sm:py-12 ${
+          viewTab === "discover" ? "max-w-5xl" : "max-w-3xl"
+        }`}
+      >
         <header className="mb-8">
           <div className="mb-6 flex items-start justify-between gap-4">
             <div>
