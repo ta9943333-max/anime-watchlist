@@ -600,7 +600,7 @@ export function MalDiscover({
         if (activeView === "search") {
           if (debouncedQuery.length >= 2) {
             const found = await searchMalAnime(debouncedQuery);
-            const fromCatalog = searchCatalogItems(debouncedQuery, 150);
+            const fromCatalog = searchCatalogItems(debouncedQuery, 200);
             let items = dedupeByMalId(
               rankSearchResults(debouncedQuery, [...fromCatalog, ...found]),
             ).slice(0, 100);

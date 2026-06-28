@@ -17,7 +17,7 @@ query ($page: Int, $perPage: Int) {
       hasNextPage
       perPage
     }
-    media(type: ANIME, sort: ID) {
+    media(type: ANIME, sort: ID, isAdult: false) {
       id
       idMal
       title {
