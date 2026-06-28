@@ -588,6 +588,38 @@ export async function updateRatings(
   }
 }
 
+export async function resetAllWatchProgress(): Promise<number> {
+  const { data, error } = await supabase
+    .from("anime")
+    .update({
+      member_statuses: {},
+      ratings: {},
+      watched_by: [],
+    })
+    .neq("id", "00000000-0000-0000-0000-000000000000")
+    .select("id");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data?.length ?? 0;
+}
+
+export async function clearAllAnimeFromWatchlist(): Promise<number> {
+  const { data, error } = await supabase
+    .from("anime")
+    .delete()
+    .neq("id", "00000000-0000-0000-0000-000000000000")
+    .select("id");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data?.length ?? 0;
+}
+
 export function subscribeToAnimeChanges(onChange: () => void): () => void {
   const channel = supabase
     .channel("anime-watchlist")

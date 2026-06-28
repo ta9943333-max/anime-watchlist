@@ -30,6 +30,9 @@ type LeaderboardProps = {
   isSyncingMal: boolean;
   onSyncMal: () => void;
   onOpenProfile: (name: string) => void;
+  onResetAllProgress?: () => Promise<void>;
+  onClearWatchlist?: () => Promise<void>;
+  isResetting?: boolean;
 };
 
 const PERIODS: LeaderboardPeriod[] = [
@@ -112,6 +115,9 @@ export function Leaderboard({
   isSyncingMal,
   onSyncMal,
   onOpenProfile,
+  onResetAllProgress,
+  onClearWatchlist,
+  isResetting = false,
 }: LeaderboardProps) {
   const [tab, setTab] = useState<LeaderboardTab>("rankings");
   const [period, setPeriod] = useState<LeaderboardPeriod>("month");
@@ -364,6 +370,38 @@ export function Leaderboard({
               </div>
             </div>
           )}
+        </div>
+      )}
+      {(onResetAllProgress || onClearWatchlist) && (
+        <div className="mt-10 rounded-xl border border-red-500/25 bg-red-950/15 p-4">
+          <p className="text-sm font-medium text-red-200">Neu starten</p>
+          <p className="mt-1 text-xs text-slate-400">
+            Setzt Fortschritt für alle in der Gruppe zurück — Status, Bewertungen
+            und Stats. Die Anime bleiben auf der Liste, außer du leerst sie
+            komplett.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {onResetAllProgress && (
+              <button
+                type="button"
+                disabled={isResetting}
+                onClick={() => void onResetAllProgress()}
+                className="rounded-xl border border-red-500/40 bg-red-950/40 px-4 py-2 text-sm font-medium text-red-200 transition hover:bg-red-950/60 disabled:opacity-50"
+              >
+                {isResetting ? "Zurücksetzen…" : "Fortschritt zurücksetzen"}
+              </button>
+            )}
+            {onClearWatchlist && (
+              <button
+                type="button"
+                disabled={isResetting}
+                onClick={() => void onClearWatchlist()}
+                className="rounded-xl border border-red-500/50 bg-red-900/30 px-4 py-2 text-sm font-medium text-red-100 transition hover:bg-red-900/50 disabled:opacity-50"
+              >
+                {isResetting ? "Löschen…" : "Watchlist komplett leeren"}
+              </button>
+            )}
+          </div>
         </div>
       )}
     </section>

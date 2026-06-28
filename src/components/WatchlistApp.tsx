@@ -29,6 +29,8 @@ import {
   reconcileAnimeMetadata,
   applyAnimeMetadataPatch,
   ensureAnimeHasRuntime,
+  resetAllWatchProgress,
+  clearAllAnimeFromWatchlist,
   subscribeToAnimeChanges,
   updateMemberStatuses,
   updateRatings,
@@ -51,6 +53,7 @@ import {
   hasSeenRecap,
   loadCurrentUser,
   markRecapSeen,
+  clearLocalProgressCache,
   saveCurrentUser,
 } from "@/lib/storage";
 import { buildMonthlyRecap, type MonthlyRecap } from "@/lib/stats/leaderboard";
@@ -95,6 +98,7 @@ export function WatchlistApp() {
   const [search, setSearch] = useState("");
   const [viewTab, setViewTab] = useState<ViewTab>("list");
   const [isSyncingMal, setIsSyncingMal] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -369,6 +373,77 @@ export function WatchlistApp() {
       setError(
         err instanceof Error ? err.message : "Anime konnte nicht gespeichert werden.",
       );
+    }
+  }
+
+  async function handleResetAllProgress() {
+    if (
+      !window.confirm(
+        "Wirklich ALLEN Fortschritt für die ganze Gruppe zurücksetzen?\n\nStatus, Bewertungen und Stats werden gelöscht. Die Anime bleiben auf der Liste.",
+      )
+    ) {
+      return;
+    }
+
+    setIsResetting(true);
+    try {
+      markLocalWrite();
+      const count = await resetAllWatchProgress();
+      clearLocalProgressCache();
+      recapCheckedRef.current = false;
+      setRecap(null);
+      const list = await fetchAnimeList();
+      setAnimeList(list);
+      setError(null);
+      window.alert(
+        `Fortschritt zurückgesetzt (${count} Anime). Ihr könnt jetzt von vorne tracken.`,
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Fortschritt konnte nicht zurückgesetzt werden.",
+      );
+    } finally {
+      setIsResetting(false);
+    }
+  }
+
+  async function handleClearWatchlist() {
+    if (
+      !window.confirm(
+        "Wirklich die GESAMTE Watchlist löschen?\n\nAlle Anime und der Fortschritt aller werden entfernt.",
+      )
+    ) {
+      return;
+    }
+    if (
+      !window.confirm(
+        "Letzte Warnung: Das kann nicht rückgängig gemacht werden. Alles löschen?",
+      )
+    ) {
+      return;
+    }
+
+    setIsResetting(true);
+    try {
+      markLocalWrite();
+      const count = await clearAllAnimeFromWatchlist();
+      clearLocalProgressCache();
+      recapCheckedRef.current = false;
+      setRecap(null);
+      setAnimeList([]);
+      setOpenFolderId(null);
+      setError(null);
+      window.alert(`${count} Anime gelöscht. Watchlist ist leer.`);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Watchlist konnte nicht geleert werden.",
+      );
+    } finally {
+      setIsResetting(false);
     }
   }
 
@@ -877,6 +952,9 @@ export function WatchlistApp() {
               isSyncingMal={isSyncingMal}
               onSyncMal={() => void handleSyncMal()}
               onOpenProfile={setProfileName}
+              onResetAllProgress={handleResetAllProgress}
+              onClearWatchlist={handleClearWatchlist}
+              isResetting={isResetting}
             />
           )
         ) : viewTab === "discover" ? (
