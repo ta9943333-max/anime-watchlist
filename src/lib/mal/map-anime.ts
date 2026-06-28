@@ -32,6 +32,7 @@ export type MappedMalAnime = {
   malId: number;
   title: string;
   titleEnglish: string | null;
+  titleRomaji: string | null;
   seriesKey: string;
   episodes: number | null;
   episodeDurationMin: number | null;
@@ -68,6 +69,7 @@ export function mapJikanAnime(anime: JikanAnime): MappedMalAnime {
     malId: anime.mal_id,
     title: displayTitle,
     titleEnglish,
+    titleRomaji: anime.title?.trim() || null,
     seriesKey: extractSeriesKey(displayTitle),
     episodes: anime.episodes,
     episodeDurationMin,

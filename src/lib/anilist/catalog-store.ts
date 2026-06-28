@@ -18,7 +18,7 @@ export type AnilistCatalogState = {
   error: string | null;
 };
 
-const PAGE_DELAY_MS = 500;
+const PAGE_DELAY_MS = 400;
 
 let state: AnilistCatalogState = {
   items: [],
@@ -145,7 +145,7 @@ export function pickRandomCatalogItem(): DiscoverItem | null {
 
 export function searchCatalogItems(
   query: string,
-  limit = 50,
+  limit = 150,
 ): DiscoverItem[] {
   const trimmed = query.trim();
   if (trimmed.length < 2 || state.items.length === 0) return [];

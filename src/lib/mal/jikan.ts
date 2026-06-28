@@ -2,8 +2,10 @@ import type { AnimeStatus } from "@/lib/statuses";
 
 export type MalSearchResult = {
   malId: number;
+  anilistId?: number;
   title: string;
   titleEnglish: string | null;
+  titleRomaji?: string | null;
   seriesKey: string;
   episodes: number | null;
   episodeDurationMin: number | null;

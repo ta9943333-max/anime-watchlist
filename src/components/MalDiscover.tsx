@@ -26,6 +26,12 @@ import {
   addPayloadFromDiscoverItem,
 } from "@/lib/mal/discover-utils";
 import {
+  loadDiscoverStatuses,
+  setDiscoverEpisodesWatched,
+  setDiscoverStatus,
+  type DiscoverStatuses,
+} from "@/lib/discover-status";
+import {
   pickRandomCatalogItem,
   searchCatalogItems,
 } from "@/lib/anilist/catalog-store";
@@ -48,6 +54,7 @@ import {
   STATUS_OPTIONS,
   getMemberStatus,
   getMemberEpisodesWatched,
+  statusShowsEpisodeProgress,
   type AnimeStatus,
 } from "@/lib/statuses";
 import type { AddAnimePayload } from "@/lib/types";
@@ -345,6 +352,7 @@ function attachWatchlistMeta(
   items: DiscoverItem[],
   animeList: AnimeEntry[],
   currentUser: string,
+  discoverStatuses: DiscoverStatuses = {},
 ): DiscoverItem[] {
   const byMalId = new Map<number, AnimeEntry>();
   for (const anime of animeList) {
@@ -353,15 +361,23 @@ function attachWatchlistMeta(
 
   return items.map((item) => {
     const inList = byMalId.get(item.malId);
+    const localKey =
+      item.malId > 0
+        ? `mal:${item.malId}`
+        : item.anilistId
+          ? `anilist:${item.anilistId}`
+          : null;
+    const local = localKey ? discoverStatuses[localKey] : null;
+
     return {
       ...item,
       watchlistId: inList?.id ?? item.watchlistId,
       myStatus: inList
         ? getMemberStatus(inList.memberStatuses, currentUser)
-        : (item.myStatus ?? "none"),
+        : (local?.status ?? item.myStatus ?? "none"),
       myEpisodesWatched: inList
         ? getMemberEpisodesWatched(inList.memberStatuses, currentUser)
-        : item.myEpisodesWatched,
+        : (local?.episodesWatched ?? item.myEpisodesWatched),
       title: inList ? getDisplayTitle(inList) : item.title,
     };
   });
@@ -405,14 +421,26 @@ export function MalDiscover({
   const [addingId, setAddingId] = useState<number | null>(null);
   const [genreFilter, setGenreFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [discoverStatuses, setDiscoverStatuses] = useState<DiscoverStatuses>(() =>
+    loadDiscoverStatuses(currentUser),
+  );
   const loadSeqRef = useRef(0);
   const fetchKeyRef = useRef<string | null>(null);
   const sectionRef = useRef<HTMLElement>(null);
 
+  useEffect(() => {
+    setDiscoverStatuses(loadDiscoverStatuses(currentUser));
+  }, [currentUser]);
+
   const apiResults = useMemo(() => {
     if (resultState.view !== view) return [];
-    return attachWatchlistMeta(resultState.items, animeList, currentUser);
-  }, [resultState, view, animeList, currentUser]);
+    return attachWatchlistMeta(
+      resultState.items,
+      animeList,
+      currentUser,
+      discoverStatuses,
+    );
+  }, [resultState, view, animeList, currentUser, discoverStatuses]);
 
   const watchlistByMalId = useMemo(() => {
     const map = new Map<number, AnimeEntry>();
@@ -429,8 +457,13 @@ export function MalDiscover({
         isCurrentlyAiring(releaseFieldsFromAnime(item)),
       );
     }
-    return attachWatchlistMeta(items, animeList, currentUser);
-  }, [catalog.items, view, animeList, currentUser]);
+    return attachWatchlistMeta(
+      items,
+      animeList,
+      currentUser,
+      discoverStatuses,
+    );
+  }, [catalog.items, view, animeList, currentUser, discoverStatuses]);
 
   const hasListFilters = Boolean(
     genreFilter ||
@@ -528,9 +561,10 @@ export function MalDiscover({
       return;
     }
     setLuckyPick(
-      attachWatchlistMeta([random], animeList, currentUser)[0] ?? null,
+      attachWatchlistMeta([random], animeList, currentUser, discoverStatuses)[0] ??
+        null,
     );
-  }, [animeList, currentUser, catalog.items.length]);
+  }, [animeList, currentUser, catalog.items.length, discoverStatuses]);
 
   useEffect(() => {
     if (
@@ -566,10 +600,10 @@ export function MalDiscover({
         if (activeView === "search") {
           if (debouncedQuery.length >= 2) {
             const found = await searchMalAnime(debouncedQuery);
-            const fromCatalog = searchCatalogItems(debouncedQuery, 50);
+            const fromCatalog = searchCatalogItems(debouncedQuery, 150);
             let items = dedupeByMalId(
               rankSearchResults(debouncedQuery, [...fromCatalog, ...found]),
-            ).slice(0, 50);
+            ).slice(0, 100);
             items = await enrichItems(items);
             if (seq !== loadSeqRef.current) return;
             setResultState({
@@ -702,34 +736,64 @@ export function MalDiscover({
     setAddingId(item.malId || item.anilistId || null);
     try {
       await onAdd(addPayloadFromDiscoverItem(item));
+      setDiscoverStatuses(loadDiscoverStatuses(currentUser));
     } finally {
       setAddingId(null);
     }
   }
 
+  const handlePersonalStatus = useCallback(
+    (item: DiscoverItem, status: AnimeStatus) => {
+      const episodes =
+        statusShowsEpisodeProgress(status) && item.myEpisodesWatched != null
+          ? item.myEpisodesWatched
+          : statusShowsEpisodeProgress(status)
+            ? 0
+            : undefined;
+      setDiscoverStatuses(
+        setDiscoverStatus(
+          currentUser,
+          item.malId,
+          item.anilistId,
+          status,
+          episodes,
+        ),
+      );
+    },
+    [currentUser],
+  );
+
+  const handlePersonalEpisodes = useCallback(
+    (item: DiscoverItem, episodesWatched: number) => {
+      setDiscoverStatuses(
+        setDiscoverEpisodesWatched(
+          currentUser,
+          item.malId,
+          item.anilistId,
+          episodesWatched,
+        ),
+      );
+    },
+    [currentUser],
+  );
+
   function renderDiscoverCard(result: DiscoverItem) {
     const inList = watchlistByMalId.get(result.malId);
-    const item: DiscoverItem = {
-      ...result,
-      watchlistId: inList?.id ?? result.watchlistId,
-      myStatus: inList
-        ? getMemberStatus(inList.memberStatuses, currentUser)
-        : (result.myStatus ?? "none"),
-      myEpisodesWatched: inList
-        ? getMemberEpisodesWatched(inList.memberStatuses, currentUser)
-        : result.myEpisodesWatched,
-      title: inList ? getDisplayTitle(inList) : result.title,
-    };
 
     return (
       <DiscoverAnimeCard
-        key={discoverItemKey(item)}
-        anime={item}
+        key={discoverItemKey(result)}
+        anime={result}
         alreadyAdded={Boolean(inList ?? result.watchlistId)}
         isAdding={addingId === (result.malId || result.anilistId)}
+        allowPersonalStatus={view === "search" || view === "all"}
         onAdd={() => void handleAdd(result)}
         onSetMyStatus={onSetMyStatus}
         onSetEpisodesWatched={onSetEpisodesWatched}
+        onSetPersonalStatus={(status) => handlePersonalStatus(result, status)}
+        onSetPersonalEpisodes={(episodes) =>
+          handlePersonalEpisodes(result, episodes)
+        }
       />
     );
   }

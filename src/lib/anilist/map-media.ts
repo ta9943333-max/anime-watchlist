@@ -91,6 +91,7 @@ export function mapAnilistMediaToDiscoverItem(
     malId: media.idMal ?? 0,
     title: displayTitle,
     titleEnglish,
+    titleRomaji: romaji,
     seriesKey: extractSeriesKey(displayTitle),
     episodes,
     episodeDurationMin,

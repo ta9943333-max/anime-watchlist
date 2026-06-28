@@ -16,11 +16,14 @@ const STOP_WORDS = new Set([
   "ni",
   "wa",
   "ga",
+  "s",
 ]);
 
 function normalize(text: string): string {
   return text
     .toLowerCase()
+    .replace(/(\w)[''\u2019]s\b/g, "$1s")
+    .replace(/[''\u2019`]/g, " ")
     .replace(/[^\w\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -32,6 +35,20 @@ function significantWords(text: string): string[] {
     .filter((word) => word.length > 1 && !STOP_WORDS.has(word));
 }
 
+function titleVariants(item: MalSearchResult): string[] {
+  const titles = [item.titleEnglish, item.title, item.titleRomaji].filter(
+    (title): title is string => Boolean(title?.trim()),
+  );
+  return [...new Set(titles.map((title) => title.trim()))];
+}
+
+function allSignificantWordsMatch(query: string, title: string): boolean {
+  const queryWords = significantWords(query);
+  if (queryWords.length === 0) return false;
+  const normalizedTitle = normalize(title);
+  return queryWords.every((word) => normalizedTitle.includes(word));
+}
+
 export function scoreSearchMatch(
   query: string,
   item: MalSearchResult,
@@ -39,17 +56,13 @@ export function scoreSearchMatch(
   const normalizedQuery = normalize(query);
   if (!normalizedQuery) return 0;
 
-  const titles = [item.titleEnglish, item.title].filter(
-    (title): title is string => Boolean(title?.trim()),
-  );
-
   let best = 0;
 
-  for (const title of titles) {
+  for (const title of titleVariants(item)) {
     const normalizedTitle = normalize(title);
     if (!normalizedTitle) continue;
 
-    const englishBonus = title === item.titleEnglish?.trim() ? 50 : 0;
+    const englishBonus = title === item.titleEnglish?.trim() ? 100 : 0;
 
     if (normalizedTitle === normalizedQuery) {
       best = Math.max(best, 10_000 + englishBonus);
@@ -63,6 +76,11 @@ export function scoreSearchMatch(
 
     if (normalizedQuery.startsWith(normalizedTitle)) {
       best = Math.max(best, 8_500 + englishBonus);
+      continue;
+    }
+
+    if (allSignificantWordsMatch(normalizedQuery, title)) {
+      best = Math.max(best, 8_800 + englishBonus);
       continue;
     }
 
@@ -91,7 +109,7 @@ export function scoreSearchMatch(
 
       const ratio = matched / queryWords.length;
       if (ratio === 1) {
-        best = Math.max(best, 7_000 + matched * 20);
+        best = Math.max(best, 7_000 + matched * 20 + englishBonus);
       } else if (ratio >= 0.75) {
         best = Math.max(best, 5_500 + matched * 10);
       } else {
@@ -101,7 +119,7 @@ export function scoreSearchMatch(
   }
 
   if (item.score && item.score > 0) {
-    best += item.score * 10;
+    best += Math.min(item.score * 10, 80);
   }
 
   return best;
@@ -117,7 +135,9 @@ export function rankSearchResults(
     const key =
       item.malId > 0
         ? `mal:${item.malId}`
-        : `title:${normalize(item.titleEnglish ?? item.title)}`;
+        : item.anilistId
+          ? `anilist:${item.anilistId}`
+          : `title:${normalize(item.titleEnglish ?? item.title)}`;
 
     const existing = seen.get(key);
     if (!existing) {
@@ -128,14 +148,20 @@ export function rankSearchResults(
     const existingScore = scoreSearchMatch(query, existing);
     const nextScore = scoreSearchMatch(query, item);
     if (nextScore > existingScore || (!existing.imageUrl && item.imageUrl)) {
-      seen.set(key, { ...existing, ...item, title: item.title || existing.title });
+      seen.set(key, {
+        ...existing,
+        ...item,
+        title: item.title || existing.title,
+        titleEnglish: item.titleEnglish ?? existing.titleEnglish,
+        titleRomaji: item.titleRomaji ?? existing.titleRomaji,
+      });
     }
   }
 
   return [...seen.values()]
     .map((item, index) => ({
       item,
-      score: scoreSearchMatch(query, item) - index * 0.01,
+      score: scoreSearchMatch(query, item) - index * 0.001,
     }))
     .sort((a, b) => b.score - a.score)
     .map((entry) => entry.item);

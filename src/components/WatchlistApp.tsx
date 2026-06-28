@@ -14,6 +14,10 @@ import { SearchBar } from "@/components/SearchBar";
 import { SortTabs } from "@/components/SortTabs";
 import { UserSelector } from "@/components/UserSelector";
 import {
+  applyDiscoverStatusToMemberStatuses,
+  clearDiscoverStatus,
+} from "@/lib/discover-status";
+import {
   addOrMergeAnime,
   deleteAnime,
   enrichMissingMalMetadata,
@@ -244,14 +248,35 @@ export function WatchlistApp() {
     try {
       markLocalWrite();
       const { entry, merged } = await addOrMergeAnime(payload, animeList);
+      let savedEntry = entry;
+
+      if (currentUser) {
+        const withDiscoverStatus = applyDiscoverStatusToMemberStatuses(
+          entry.memberStatuses,
+          currentUser,
+          payload.malId ?? null,
+          null,
+        );
+        if (withDiscoverStatus !== entry.memberStatuses) {
+          markLocalWrite();
+          await updateMemberStatuses(entry.id, withDiscoverStatus);
+          savedEntry = { ...entry, memberStatuses: withDiscoverStatus };
+          clearDiscoverStatus(currentUser, payload.malId ?? null, null);
+        }
+      }
+
       setAnimeList((prev) => {
         if (merged) {
-          return prev.map((item) => (item.id === entry.id ? entry : item));
+          return prev.map((item) =>
+            item.id === savedEntry.id ? savedEntry : item,
+          );
         }
-        if (prev.some((item) => item.id === entry.id)) {
-          return prev;
+        if (prev.some((item) => item.id === savedEntry.id)) {
+          return prev.map((item) =>
+            item.id === savedEntry.id ? savedEntry : item,
+          );
         }
-        return [entry, ...prev];
+        return [savedEntry, ...prev];
       });
       setError(null);
     } catch (err) {

@@ -16,8 +16,11 @@ type DiscoverAnimeCardProps = {
   alreadyAdded: boolean;
   isAdding: boolean;
   onAdd: () => void;
+  allowPersonalStatus?: boolean;
   onSetMyStatus?: (animeId: string, status: AnimeStatus) => void;
   onSetEpisodesWatched?: (animeId: string, episodesWatched: number) => void;
+  onSetPersonalStatus?: (status: AnimeStatus) => void;
+  onSetPersonalEpisodes?: (episodesWatched: number) => void;
 };
 
 export function DiscoverAnimeCard({
@@ -25,8 +28,11 @@ export function DiscoverAnimeCard({
   alreadyAdded,
   isAdding,
   onAdd,
+  allowPersonalStatus = false,
   onSetMyStatus,
   onSetEpisodesWatched,
+  onSetPersonalStatus,
+  onSetPersonalEpisodes,
 }: DiscoverAnimeCardProps) {
   const myStatus = anime.myStatus ?? "none";
   const myEpisodesWatched =
@@ -37,6 +43,32 @@ export function DiscoverAnimeCard({
   const accentClassName =
     myStatus !== "none" ? "ring-1 ring-violet-500/20" : undefined;
 
+  const showWatchlistStatus =
+    alreadyAdded && anime.watchlistId && onSetMyStatus != null;
+  const showPersonalStatus =
+    allowPersonalStatus && !alreadyAdded && onSetPersonalStatus != null;
+  const showStatusControls = showWatchlistStatus || showPersonalStatus;
+
+  function handleStatusChange(status: AnimeStatus) {
+    if (showWatchlistStatus && anime.watchlistId && onSetMyStatus) {
+      onSetMyStatus(anime.watchlistId, status);
+      return;
+    }
+    if (showPersonalStatus && onSetPersonalStatus) {
+      onSetPersonalStatus(status);
+    }
+  }
+
+  function handleEpisodesChange(value: number) {
+    if (showWatchlistStatus && anime.watchlistId && onSetEpisodesWatched) {
+      onSetEpisodesWatched(anime.watchlistId, value);
+      return;
+    }
+    if (showPersonalStatus && onSetPersonalEpisodes) {
+      onSetPersonalEpisodes(value);
+    }
+  }
+
   return (
     <AnimeLiveChartCard
       anime={anime}
@@ -45,19 +77,21 @@ export function DiscoverAnimeCard({
         myStatus !== "none" ? <StatusBadge status={myStatus} /> : undefined
       }
       actions={
-        alreadyAdded && anime.watchlistId && onSetMyStatus ? (
+        showStatusControls ? (
           <div className="space-y-2 rounded-lg border border-violet-500/25 bg-violet-950/20 p-2">
             <div>
               <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-violet-300">
                 Dein Status
+                {showPersonalStatus && !alreadyAdded ? (
+                  <span className="ml-1 normal-case text-slate-500">
+                    (nur für dich)
+                  </span>
+                ) : null}
               </label>
               <select
                 value={myStatus}
                 onChange={(event) =>
-                  onSetMyStatus(
-                    anime.watchlistId!,
-                    event.target.value as AnimeStatus,
-                  )
+                  handleStatusChange(event.target.value as AnimeStatus)
                 }
                 className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white outline-none focus:border-violet-500/60"
               >
@@ -77,11 +111,7 @@ export function DiscoverAnimeCard({
               totalEpisodes={anime.episodes}
               episodesWatched={myEpisodesWatched}
               compact
-              onEpisodesWatchedChange={(value) => {
-                if (anime.watchlistId && onSetEpisodesWatched) {
-                  onSetEpisodesWatched(anime.watchlistId, value);
-                }
-              }}
+              onEpisodesWatchedChange={handleEpisodesChange}
             />
           </div>
         ) : undefined

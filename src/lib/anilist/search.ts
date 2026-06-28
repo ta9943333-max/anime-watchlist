@@ -54,9 +54,10 @@ query ($search: String, $page: Int, $perPage: Int) {
 }
 `;
 
-export async function searchAnilistAnime(
+async function fetchAnilistSearchPage(
   query: string,
-  perPage = 50,
+  page: number,
+  perPage: number,
 ): Promise<MalSearchResult[]> {
   const response = await fetch(ANILIST_URL, {
     method: "POST",
@@ -66,7 +67,7 @@ export async function searchAnilistAnime(
     },
     body: JSON.stringify({
       query: SEARCH_QUERY,
-      variables: { search: query, page: 1, perPage },
+      variables: { search: query, page, perPage },
     }),
     next: { revalidate: 3600 },
   });
@@ -83,4 +84,18 @@ export async function searchAnilistAnime(
     const item = mapAnilistMediaToDiscoverItem(media);
     return item as MalSearchResult;
   });
+}
+
+export async function searchAnilistAnime(
+  query: string,
+  perPage = 50,
+  pages = 2,
+): Promise<MalSearchResult[]> {
+  const pageResults = await Promise.all(
+    Array.from({ length: pages }, (_, index) =>
+      fetchAnilistSearchPage(query, index + 1, perPage),
+    ),
+  );
+
+  return pageResults.flat();
 }
