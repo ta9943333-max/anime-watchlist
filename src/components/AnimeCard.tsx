@@ -16,7 +16,7 @@ import { RewatchCountField } from "@/components/RewatchCountField";
 import { ProgressBar } from "@/components/ProgressBar";
 import { StatusBadge } from "@/components/StatusBadge";
 import { fetchMalAnimeDetails, type MalSearchResult } from "@/lib/mal/jikan";
-import { anilistCoverUrl } from "@/lib/anime/cover";
+import { buildCoverFallbacks } from "@/lib/anime/cover";
 import {
   countFinishedMembers,
   getMemberStatus,
@@ -119,10 +119,15 @@ export function AnimeCard({
     };
   }, [anime.malId, malDetailsProp]);
 
-  const placeholderCover =
-    anime.anilistId && anime.anilistId > 0
-      ? anilistCoverUrl(anime.anilistId, "medium")
-      : null;
+  const coverFallbacks = useMemo(
+    () =>
+      buildCoverFallbacks({
+        anilistId: anime.anilistId,
+        malId: anime.malId,
+        malImageUrl: malDetails?.imageUrl,
+      }),
+    [anime.anilistId, anime.malId, malDetails?.imageUrl],
+  );
 
   const cardData = useMemo(
     () => ({
@@ -130,7 +135,8 @@ export function AnimeCard({
       genres: anime.genres,
       malId: anime.malId,
       anilistId: anime.anilistId,
-      imageUrl: malDetails?.imageUrl ?? placeholderCover,
+      imageUrl: coverFallbacks[0] ?? null,
+      coverFallbacks: coverFallbacks.slice(1),
       studios: malDetails?.studios ?? [],
       score: malDetails?.score ?? null,
       episodes: anime.episodes,
@@ -144,7 +150,7 @@ export function AnimeCard({
       malYear: anime.malYear,
       malStatus: anime.malStatus,
     }),
-    [anime, displayTitle, malDetails, placeholderCover],
+    [anime, displayTitle, malDetails, coverFallbacks],
   );
 
   const accentClassName = isFinishedStatus(myStatus)

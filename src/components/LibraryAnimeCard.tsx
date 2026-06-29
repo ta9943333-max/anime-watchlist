@@ -3,7 +3,8 @@
 import { memo, useCallback } from "react";
 import { Sparkles } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
-import { resolveAnimeCoverUrl } from "@/lib/anime/cover";
+import { LazyCoverImage } from "@/components/ui/LazyCoverImage";
+import { buildCoverFallbacks } from "@/lib/anime/cover";
 import { getMemberEpisodesWatched, getMemberStatus } from "@/lib/statuses";
 import { getDisplayTitle, type AnimeEntry } from "@/lib/types";
 
@@ -25,10 +26,11 @@ function LibraryAnimeCardInner({
     anime.memberStatuses,
     currentUser,
   );
-  const cover = resolveAnimeCoverUrl({
+  const coverSources = buildCoverFallbacks({
     anilistId: anime.anilistId,
     malId: anime.malId,
   });
+  const cover = coverSources[0] ?? null;
 
   const progressLabel =
     status !== "none" &&
@@ -50,12 +52,10 @@ function LibraryAnimeCardInner({
     >
       <div className="relative overflow-hidden rounded-[3px] bg-[var(--surface-elevated)]">
         {cover ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <LazyCoverImage
             src={cover}
+            fallbacks={coverSources.slice(1)}
             alt=""
-            loading="lazy"
-            decoding="async"
             className="aspect-[2/3] w-full object-cover transition duration-200 group-hover:scale-[1.03]"
           />
         ) : (
