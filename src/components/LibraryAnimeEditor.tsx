@@ -22,7 +22,6 @@ type LibraryAnimeEditorProps = {
   anime: AnimeEntry;
   folders: Folder[];
   currentUser: string;
-  malImageUrl?: string | null;
   onClose: () => void;
   onSetMyStatus: (animeId: string, status: AnimeStatus) => void;
   onSetEpisodesWatched: (animeId: string, episodesWatched: number) => void;
@@ -36,7 +35,6 @@ export function LibraryAnimeEditor({
   anime,
   folders,
   currentUser,
-  malImageUrl,
   onClose,
   onSetMyStatus,
   onSetEpisodesWatched,
@@ -54,7 +52,6 @@ export function LibraryAnimeEditor({
   const cover = resolveAnimeCoverUrl({
     anilistId: anime.anilistId,
     malId: anime.malId,
-    malImageUrl,
   });
 
   useEffect(() => {

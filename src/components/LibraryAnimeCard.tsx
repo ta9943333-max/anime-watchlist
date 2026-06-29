@@ -1,7 +1,7 @@
 "use client";
 
-import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { LazyCoverImage } from "@/components/ui/LazyCoverImage";
+import { memo, useCallback } from "react";
+import { Sparkles } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
 import { resolveAnimeCoverUrl } from "@/lib/anime/cover";
 import { getMemberEpisodesWatched, getMemberStatus } from "@/lib/statuses";
@@ -10,14 +10,12 @@ import { getDisplayTitle, type AnimeEntry } from "@/lib/types";
 type LibraryAnimeCardProps = {
   anime: AnimeEntry;
   currentUser: string;
-  malImageUrl?: string | null;
   onOpen: (animeId: string) => void;
 };
 
 function LibraryAnimeCardInner({
   anime,
   currentUser,
-  malImageUrl,
   onOpen,
 }: LibraryAnimeCardProps) {
   const title = getDisplayTitle(anime);
@@ -30,7 +28,6 @@ function LibraryAnimeCardInner({
   const cover = resolveAnimeCoverUrl({
     anilistId: anime.anilistId,
     malId: anime.malId,
-    malImageUrl,
   });
 
   const progressLabel =
@@ -52,11 +49,20 @@ function LibraryAnimeCardInner({
       tabIndex={0}
     >
       <div className="relative overflow-hidden rounded-[3px] bg-[var(--surface-elevated)]">
-        <LazyCoverImage
-          src={cover}
-          alt=""
-          className="aspect-[2/3] w-full object-cover transition duration-200 group-hover:scale-[1.03]"
-        />
+        {cover ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={cover}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="aspect-[2/3] w-full object-cover transition duration-200 group-hover:scale-[1.03]"
+          />
+        ) : (
+          <div className="flex aspect-[2/3] w-full items-center justify-center">
+            <Sparkles className="h-6 w-6 text-[var(--accent)]/40" />
+          </div>
+        )}
         {rating != null && rating > 0 && (
           <span className="absolute bottom-1.5 left-1.5 rounded bg-black/85 px-1 py-0.5 text-[10px] font-bold text-[var(--score)]">
             ★ {rating}
@@ -82,71 +88,30 @@ function LibraryAnimeCardInner({
 
 export const LibraryAnimeCard = memo(LibraryAnimeCardInner);
 
-const INITIAL_BATCH = 60;
-const BATCH_SIZE = 48;
-
 export function LibraryAnimeGrid({
   animeList,
   currentUser,
-  malImages,
   onOpenAnime,
 }: {
   animeList: AnimeEntry[];
   currentUser: string;
-  malImages: ReadonlyMap<number, string>;
   onOpenAnime: (animeId: string) => void;
 }) {
-  const [visibleCount, setVisibleCount] = useState(INITIAL_BATCH);
-  const sentinelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setVisibleCount(INITIAL_BATCH);
-  }, [animeList]);
-
-  useEffect(() => {
-    const node = sentinelRef.current;
-    if (!node || visibleCount >= animeList.length) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) {
-          setVisibleCount((count) =>
-            Math.min(count + BATCH_SIZE, animeList.length),
-          );
-        }
-      },
-      { rootMargin: "400px" },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [animeList.length, visibleCount]);
-
-  const visible = animeList.slice(0, visibleCount);
   const handleOpen = useCallback(
     (id: string) => onOpenAnime(id),
     [onOpenAnime],
   );
 
   return (
-    <>
-      <div className="library-grid">
-        {visible.map((anime) => (
-          <LibraryAnimeCard
-            key={anime.id}
-            anime={anime}
-            currentUser={currentUser}
-            malImageUrl={
-              anime.malId ? malImages.get(anime.malId) ?? null : null
-            }
-            onOpen={handleOpen}
-          />
-        ))}
-      </div>
-      {visibleCount < animeList.length && (
-        <div ref={sentinelRef} className="flex justify-center py-8">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" />
-        </div>
-      )}
-    </>
+    <div className="library-grid">
+      {animeList.map((anime) => (
+        <LibraryAnimeCard
+          key={anime.id}
+          anime={anime}
+          currentUser={currentUser}
+          onOpen={handleOpen}
+        />
+      ))}
+    </div>
   );
 }

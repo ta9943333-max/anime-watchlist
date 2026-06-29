@@ -31,7 +31,6 @@ import {
   moveAnimeToFolder,
   renameAnime,
   reconcileAnimeMetadata,
-  applyAnimeMetadataPatch,
   ensureAnimeHasRuntime,
   resetAllWatchProgress,
   clearAllAnimeFromWatchlist,
@@ -60,6 +59,11 @@ import {
   clearLocalProgressCache,
   saveCurrentUser,
 } from "@/lib/storage";
+import {
+  clearAnimeListCache,
+  loadAnimeListCache,
+  saveAnimeListCache,
+} from "@/lib/storage/anime-list-cache";
 import { buildMonthlyRecap, type MonthlyRecap } from "@/lib/stats/leaderboard";
 import { computeWatchContribution } from "@/lib/stats/watch-progress";
 import { getExactRuntime } from "@/lib/anime/runtime";
@@ -107,7 +111,9 @@ export function WatchlistApp() {
   const [currentUser, setCurrentUser] = useState<string | null>(getInitialUser);
   const [members, setMembers] = useState<Member[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
-  const [animeList, setAnimeList] = useState<AnimeEntry[]>([]);
+  const [animeList, setAnimeList] = useState<AnimeEntry[]>(
+    () => loadAnimeListCache() ?? [],
+  );
   const [openFolderId, setOpenFolderId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterOption>("all");
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
@@ -116,7 +122,9 @@ export function WatchlistApp() {
   const [viewTab, setViewTab] = useState<ViewTab>("list");
   const [isSyncingMal, setIsSyncingMal] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(
+    () => loadAnimeListCache() == null,
+  );
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -129,6 +137,7 @@ export function WatchlistApp() {
   const recapCheckedRef = useRef(false);
   const [folderSetupNeeded, setFolderSetupNeeded] = useState(false);
   const skipRemoteSyncUntilRef = useRef(0);
+  const reloadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function markLocalWrite() {
     skipRemoteSyncUntilRef.current = Date.now() + 2000;
@@ -147,17 +156,21 @@ export function WatchlistApp() {
 
     if (!target || hasSeenRecap(target.year, target.month)) return;
 
-    const built = buildMonthlyRecap(
-      members,
-      animeList,
-      target.year,
-      target.month,
-    );
-    if (built.totalCompleted > 0) {
-      setRecap(built);
-    } else {
-      markRecapSeen(target.year, target.month);
-    }
+    const timer = window.setTimeout(() => {
+      const built = buildMonthlyRecap(
+        members,
+        animeList,
+        target.year,
+        target.month,
+      );
+      if (built.totalCompleted > 0) {
+        setRecap(built);
+      } else {
+        markRecapSeen(target.year, target.month);
+      }
+    }, 1500);
+
+    return () => window.clearTimeout(timer);
   }, [currentUser, isLoading, members, animeList]);
 
   useEffect(() => {
@@ -181,12 +194,22 @@ export function WatchlistApp() {
   useEffect(() => {
     let cancelled = false;
 
-    async function loadData(options?: { backgroundSync?: boolean }) {
+    async function loadData() {
       try {
-        const [list, memberList, allowed] = await Promise.all([
-          fetchAnimeList(),
-          fetchMembers(),
-          fetchAllowedMemberNames(),
+        const listPromise = fetchAnimeList();
+        const membersPromise = fetchMembers();
+        const allowedPromise = fetchAllowedMemberNames();
+
+        const list = await listPromise;
+        if (!cancelled) {
+          saveAnimeListCache(list);
+          setAnimeList(list);
+          setIsLoading(false);
+        }
+
+        const [memberList, allowed] = await Promise.all([
+          membersPromise,
+          allowedPromise,
         ]);
 
         let folderList: Folder[] = [];
@@ -197,7 +220,6 @@ export function WatchlistApp() {
           if (!cancelled) setFolderSetupNeeded(true);
         }
 
-        let ready = list;
         if (
           list.length > 0 &&
           list.every(
@@ -207,31 +229,15 @@ export function WatchlistApp() {
           )
         ) {
           clearLocalProgressCache();
+          clearAnimeListCache();
           if (currentUser) clearAllDiscoverStatuses(currentUser);
         }
 
         if (!cancelled) {
-          setAnimeList(ready);
           setMembers(memberList);
           setAllowedNames(allowed);
           setFolders(folderList);
           setError(null);
-          setIsLoading(false);
-        }
-
-        // MAL-Abgleich im Hintergrund — blockiert nicht den ersten Paint
-        if (options?.backgroundSync !== false) {
-          void (async () => {
-            try {
-              markLocalWrite();
-              const synced = await reconcileAnimeMetadata(list);
-              if (!cancelled) {
-                setAnimeList((prev) => applyAnimeMetadataPatch(prev, synced));
-              }
-            } catch {
-              // Liste bleibt nutzbar ohne MAL-Abgleich
-            }
-          })();
         }
       } catch (err) {
         if (!cancelled) {
@@ -245,23 +251,28 @@ export function WatchlistApp() {
       }
     }
 
+    function scheduleReload() {
+      if (shouldSkipRemoteSync()) return;
+      if (reloadDebounceRef.current) {
+        clearTimeout(reloadDebounceRef.current);
+      }
+      reloadDebounceRef.current = setTimeout(() => {
+        reloadDebounceRef.current = null;
+        void loadData();
+      }, 400);
+    }
+
     void loadData();
 
-    const unsubscribeAnime = subscribeToAnimeChanges(() => {
-      if (shouldSkipRemoteSync()) return;
-      void loadData({ backgroundSync: false });
-    });
-    const unsubscribeMembers = subscribeToMemberChanges(() => {
-      if (shouldSkipRemoteSync()) return;
-      void loadData();
-    });
-    const unsubscribeFolders = subscribeToFolderChanges(() => {
-      if (shouldSkipRemoteSync()) return;
-      void loadData();
-    });
+    const unsubscribeAnime = subscribeToAnimeChanges(scheduleReload);
+    const unsubscribeMembers = subscribeToMemberChanges(scheduleReload);
+    const unsubscribeFolders = subscribeToFolderChanges(scheduleReload);
 
     return () => {
       cancelled = true;
+      if (reloadDebounceRef.current) {
+        clearTimeout(reloadDebounceRef.current);
+      }
       unsubscribeAnime();
       unsubscribeMembers();
       unsubscribeFolders();
@@ -461,6 +472,7 @@ export function WatchlistApp() {
       markLocalWrite();
       const reconciled = await reconcileAnimeMetadata(animeList);
       const enriched = await enrichMissingMalMetadata(reconciled);
+      saveAnimeListCache(enriched);
       setAnimeList(enriched);
       setError(null);
     } catch (err) {
@@ -965,7 +977,7 @@ export function WatchlistApp() {
         )}
 
         {viewTab === "profile" ? (
-          isLoading ? (
+          isLoading && animeList.length === 0 ? (
             <div className="flex justify-center py-16">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" />
             </div>
@@ -982,7 +994,7 @@ export function WatchlistApp() {
             />
           )
         ) : viewTab === "leaderboard" ? (
-          isLoading ? (
+          isLoading && animeList.length === 0 ? (
             <div className="flex justify-center py-16">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" />
             </div>
@@ -1055,7 +1067,7 @@ export function WatchlistApp() {
           </div>
         )}
 
-        {isLoading ? (
+        {isLoading && animeList.length === 0 ? (
           <div className="flex justify-center py-16">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-violet-500 border-t-transparent" />
           </div>

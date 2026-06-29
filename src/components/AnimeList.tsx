@@ -1,10 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { Film } from "lucide-react";
 import { LibraryAnimeEditor } from "@/components/LibraryAnimeEditor";
 import { LibraryAnimeGrid } from "@/components/LibraryAnimeCard";
-import { fetchMalAnimeDetails } from "@/lib/mal/jikan";
 import type { AnimeStatus } from "@/lib/statuses";
 import type { AnimeEntry, Folder, Member } from "@/lib/types";
 
@@ -37,36 +36,6 @@ export function AnimeList({
   emptyMessage = "Keine Anime in dieser Ansicht.",
 }: AnimeListProps) {
   const [editId, setEditId] = useState<string | null>(null);
-  const [malImages, setMalImages] = useState<Map<number, string>>(new Map());
-
-  const malIdsNeedingImages = useMemo(() => {
-    const ids = new Set<number>();
-    for (const anime of animeList) {
-      if (anime.anilistId && anime.anilistId > 0) continue;
-      if (anime.malId && anime.malId > 0) ids.add(anime.malId);
-    }
-    return [...ids];
-  }, [animeList]);
-
-  useEffect(() => {
-    if (malIdsNeedingImages.length === 0) return;
-    let cancelled = false;
-
-    void fetchMalAnimeDetails(malIdsNeedingImages).then((map) => {
-      if (cancelled) return;
-      setMalImages((prev) => {
-        const next = new Map(prev);
-        for (const [malId, details] of map) {
-          if (details.imageUrl) next.set(malId, details.imageUrl);
-        }
-        return next;
-      });
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [malIdsNeedingImages]);
 
   const editAnime = editId
     ? animeList.find((entry) => entry.id === editId)
@@ -88,7 +57,6 @@ export function AnimeList({
       <LibraryAnimeGrid
         animeList={animeList}
         currentUser={currentUser}
-        malImages={malImages}
         onOpenAnime={handleOpen}
       />
       {editAnime && (
@@ -96,9 +64,6 @@ export function AnimeList({
           anime={editAnime}
           folders={folders}
           currentUser={currentUser}
-          malImageUrl={
-            editAnime.malId ? malImages.get(editAnime.malId) ?? null : null
-          }
           onClose={() => setEditId(null)}
           onSetMyStatus={onSetMyStatus}
           onSetEpisodesWatched={onSetEpisodesWatched}
