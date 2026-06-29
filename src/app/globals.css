@@ -188,6 +188,40 @@ body {
   background: rgb(var(--color-primary-dark));
 }
 
+.btn-anilist-ghost {
+  border-radius: var(--border-radius);
+  padding: 0.375rem 0.75rem;
+  color: rgb(var(--color-text-light));
+  transition: color var(--transition-smooth), background var(--transition-smooth);
+  min-height: 44px;
+}
+
+.btn-anilist-ghost:hover {
+  color: white;
+  background: rgb(var(--color-foreground-grey));
+}
+
+.markdown-spoiler {
+  background-color: rgb(var(--color-foreground));
+  color: transparent !important;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0 4px;
+  user-select: none;
+  transition: background-color var(--transition-smooth), color var(--transition-smooth);
+}
+
+.markdown-spoiler.revealed {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: rgb(var(--color-text)) !important;
+  user-select: text;
+}
+
+.anilist-markdown .user-mention,
+.anilist-markdown .custom-link {
+  color: rgb(var(--color-primary));
+}
+
 .surface-card {
   border-radius: var(--border-radius);
   border: 1px solid rgb(var(--color-foreground-grey));

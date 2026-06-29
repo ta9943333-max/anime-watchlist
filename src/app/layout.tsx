@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Anime Watchlist",
-  description: "Gemeinsame Anime-To-Do-Liste für Freunde",
+  title: "AniList",
+  description: "Track your anime — synced with AniList.co",
 };
 
 export default function RootLayout({

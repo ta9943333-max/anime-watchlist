@@ -77,7 +77,7 @@ export async function GET(request: Request) {
         query: CATALOG_QUERY,
         variables: { page, perPage: PER_PAGE },
       }),
-      next: { revalidate: 86400 },
+      next: { revalidate: 300 },
     });
 
     if (!response.ok) {

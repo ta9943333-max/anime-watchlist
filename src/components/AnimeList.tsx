@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useMemo } from "react";
 import { Film } from "lucide-react";
-import { LibraryAnimeEditor } from "@/components/LibraryAnimeEditor";
-import { LibraryAnimeGrid } from "@/components/LibraryAnimeCard";
+import { AnimeCard } from "@/components/AnimeCard";
+import { ANIME_CARD_GRID } from "@/components/AnimeLiveChartCard";
+import { useProgressiveRender } from "@/hooks/use-progressive-render";
+import { useStaggeredMalDetails } from "@/hooks/use-staggered-mal-details";
 import type { AnimeStatus } from "@/lib/statuses";
 import type { AnimeEntry, Folder, Member } from "@/lib/types";
 
@@ -25,23 +27,39 @@ type AnimeListProps = {
 
 export function AnimeList({
   animeList,
+  members,
   folders,
   currentUser,
   onSetMyStatus,
   onSetEpisodesWatched,
   onSetRewatchCount,
   onMoveToFolder,
+  onRenameAnime,
   onDeleteAnime,
   onRateAnime,
+  onOpenProfile,
   emptyMessage = "Keine Anime in dieser Ansicht.",
 }: AnimeListProps) {
-  const [editId, setEditId] = useState<string | null>(null);
+  const { visibleItems, hasMore, sentinelRef } =
+    useProgressiveRender(animeList);
 
-  const editAnime = editId
-    ? animeList.find((entry) => entry.id === editId)
-    : undefined;
+  const allMalIds = useMemo(
+    () =>
+      animeList
+        .map((anime) => anime.malId)
+        .filter((id): id is number => id != null && id > 0),
+    [animeList],
+  );
 
-  const handleOpen = useCallback((id: string) => setEditId(id), []);
+  const priorityMalIds = useMemo(
+    () =>
+      visibleItems
+        .map((anime) => anime.malId)
+        .filter((id): id is number => id != null && id > 0),
+    [visibleItems],
+  );
+
+  const malDetailsById = useStaggeredMalDetails(allMalIds, priorityMalIds);
 
   if (animeList.length === 0) {
     return (
@@ -54,24 +72,40 @@ export function AnimeList({
 
   return (
     <>
-      <LibraryAnimeGrid
-        animeList={animeList}
-        currentUser={currentUser}
-        onOpenAnime={handleOpen}
-      />
-      {editAnime && (
-        <LibraryAnimeEditor
-          anime={editAnime}
-          folders={folders}
-          currentUser={currentUser}
-          onClose={() => setEditId(null)}
-          onSetMyStatus={onSetMyStatus}
-          onSetEpisodesWatched={onSetEpisodesWatched}
-          onSetRewatchCount={onSetRewatchCount}
-          onMoveToFolder={onMoveToFolder}
-          onDeleteAnime={onDeleteAnime}
-          onRateAnime={onRateAnime}
-        />
+      <div className={ANIME_CARD_GRID}>
+        {visibleItems.map((anime) => (
+          <AnimeCard
+            key={anime.id}
+            anime={anime}
+            members={members}
+            folders={folders}
+            currentUser={currentUser}
+            malDetails={
+              anime.malId && anime.malId > 0
+                ? malDetailsById.get(anime.malId)
+                : undefined
+            }
+            onSetMyStatus={onSetMyStatus}
+            onSetEpisodesWatched={onSetEpisodesWatched}
+            onSetRewatchCount={onSetRewatchCount}
+            onMoveToFolder={onMoveToFolder}
+            onRenameAnime={onRenameAnime}
+            onDeleteAnime={onDeleteAnime}
+            onRateAnime={onRateAnime}
+            onOpenProfile={onOpenProfile}
+          />
+        ))}
+      </div>
+      {hasMore && (
+        <div
+          ref={sentinelRef}
+          className="flex justify-center py-10 text-sm text-[var(--text-muted)]"
+        >
+          <div className="flex items-center gap-3">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" />
+            Weitere Anime werden geladen…
+          </div>
+        </div>
       )}
     </>
   );

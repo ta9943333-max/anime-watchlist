@@ -8,6 +8,7 @@ export function middleware(request: NextRequest) {
   if (
     pathname.startsWith("/access") ||
     pathname.startsWith("/api/access") ||
+    pathname.startsWith("/api/anilist") ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico"
   ) {

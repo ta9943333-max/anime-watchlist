@@ -107,7 +107,7 @@ function getInitialUser(): string | null {
   return loadCurrentUser();
 }
 
-export function WatchlistApp() {
+export function WatchlistApp({ embedded = false }: { embedded?: boolean } = {}) {
   const [currentUser, setCurrentUser] = useState<string | null>(getInitialUser);
   const [members, setMembers] = useState<Member[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -927,7 +927,13 @@ export function WatchlistApp() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--background)] pb-nav-safe">
+    <div
+      className={
+        embedded
+          ? "bg-[var(--background)] pb-nav-safe"
+          : "min-h-screen bg-[var(--background)] pb-nav-safe"
+      }
+    >
       <div className="relative mx-auto w-full max-w-[var(--content-max-width)] px-2 py-3 sm:px-4 sm:py-4">
         {viewTab !== "profile" && (
           <header className="mb-5 flex items-center justify-between gap-3">
@@ -937,11 +943,13 @@ export function WatchlistApp() {
               </div>
               <div>
                 <h1 className="text-lg font-bold leading-tight text-white">
-                  {viewTab === "list"
-                    ? "Bibliothek"
-                    : viewTab === "discover"
-                      ? "Entdecken"
-                      : "Charts"}
+                  {embedded
+                    ? "Group Watchlist"
+                    : viewTab === "list"
+                      ? "Bibliothek"
+                      : viewTab === "discover"
+                        ? "Entdecken"
+                        : "Charts"}
                 </h1>
                 <p className="text-xs text-[var(--text-muted)]">
                   {currentUser} · {sortedMembers.length} Mitglieder
@@ -1096,15 +1104,19 @@ export function WatchlistApp() {
 
             {!openFolderId && (
               <section className="library-section w-full">
-                <div className="mb-3 flex items-end justify-between gap-3">
+                <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
                   <div>
-                    <h2 className="text-base font-semibold text-[var(--foreground)]">
-                      Anime
+                    <h2 className="text-lg font-semibold text-[var(--foreground)]">
+                      Alle Anime
                     </h2>
-                    <p className="text-xs text-[var(--text-muted)]">
+                    <p className="text-sm text-[var(--text-muted)]">
                       {allAnimeList.length} Einträge
                     </p>
                   </div>
+                </div>
+
+                <div className="mb-5">
+                  <AnimeForm onAdd={handleAddAnime} />
                 </div>
 
                 <AnimeList
