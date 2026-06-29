@@ -1,5 +1,4 @@
 import type { AnimeStatus } from "@/lib/statuses";
-import { buildCoverFallbacks } from "@/lib/anime/cover";
 
 export type MalSearchResult = {
   malId: number;
@@ -224,27 +223,15 @@ export async function hydrateDiscoverImages(
 
   return items.map((item) => {
     const extra = details.get(item.malId);
-    const merged = extra
-      ? {
-          ...item,
-          imageUrl: item.imageUrl ?? extra.imageUrl,
-          synopsis: item.synopsis ?? extra.synopsis,
-          studios: item.studios.length > 0 ? item.studios : extra.studios,
-          score: item.score ?? extra.score,
-          malStatus: item.malStatus ?? extra.malStatus,
-        }
-      : item;
+    if (!extra) return item;
 
-    if (merged.imageUrl) return merged;
-
-    const fallbacks = buildCoverFallbacks({
-      anilistId: merged.anilistId,
-      malId: merged.malId,
-      malImageUrl: merged.imageUrl,
-    });
     return {
-      ...merged,
-      imageUrl: fallbacks[0] ?? null,
+      ...item,
+      imageUrl: item.imageUrl ?? extra.imageUrl,
+      synopsis: item.synopsis ?? extra.synopsis,
+      studios: item.studios.length > 0 ? item.studios : extra.studios,
+      score: item.score ?? extra.score,
+      malStatus: item.malStatus ?? extra.malStatus,
     };
   });
 }

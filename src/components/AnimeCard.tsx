@@ -15,8 +15,7 @@ import { MediaDetailModal } from "@/components/MediaDetailModal";
 import { RewatchCountField } from "@/components/RewatchCountField";
 import { ProgressBar } from "@/components/ProgressBar";
 import { StatusBadge } from "@/components/StatusBadge";
-import { fetchMalAnimeDetails, type MalSearchResult } from "@/lib/mal/jikan";
-import { buildCoverFallbacks } from "@/lib/anime/cover";
+import { fetchMalAnimeDetails } from "@/lib/mal/jikan";
 import {
   countFinishedMembers,
   getMemberStatus,
@@ -35,18 +34,11 @@ import {
   type Member,
 } from "@/lib/types";
 
-type MalCardDetails = Pick<
-  MalSearchResult,
-  "imageUrl" | "synopsis" | "studios" | "score"
->;
-
 type AnimeCardProps = {
   anime: AnimeEntry;
   members: Member[];
   folders: Folder[];
   currentUser: string;
-  /** Von AnimeList gestaffelt geladen — kein eigener API-Call pro Karte */
-  malDetails?: MalCardDetails;
   onSetMyStatus: (animeId: string, status: AnimeStatus) => void;
   onSetEpisodesWatched: (animeId: string, episodesWatched: number) => void;
   onSetRewatchCount: (animeId: string, rewatchCount: number) => void;
@@ -64,7 +56,6 @@ export function AnimeCard({
   members,
   folders,
   currentUser,
-  malDetails: malDetailsProp,
   onSetMyStatus,
   onSetEpisodesWatched,
   onSetRewatchCount,
@@ -79,11 +70,12 @@ export function AnimeCard({
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [malDetailsLocal, setMalDetailsLocal] = useState<MalCardDetails | null>(
-    null,
-  );
-
-  const malDetails = malDetailsProp ?? malDetailsLocal;
+  const [malDetails, setMalDetails] = useState<{
+    imageUrl: string | null;
+    synopsis: string | null;
+    studios: string[];
+    score: number | null;
+  } | null>(null);
 
   const displayTitle = getDisplayTitle(anime);
   const sortedMembers = sortMembersByName(members);
@@ -98,7 +90,6 @@ export function AnimeCard({
   const { average, count } = getAverageRating(anime.ratings);
 
   useEffect(() => {
-    if (malDetailsProp != null) return;
     if (!anime.malId || anime.malId <= 0) return;
 
     let cancelled = false;
@@ -106,7 +97,7 @@ export function AnimeCard({
       if (cancelled) return;
       const details = map.get(anime.malId!);
       if (!details) return;
-      setMalDetailsLocal({
+      setMalDetails({
         imageUrl: details.imageUrl,
         synopsis: details.synopsis,
         studios: details.studios,
@@ -117,26 +108,14 @@ export function AnimeCard({
     return () => {
       cancelled = true;
     };
-  }, [anime.malId, malDetailsProp]);
-
-  const coverFallbacks = useMemo(
-    () =>
-      buildCoverFallbacks({
-        anilistId: anime.anilistId,
-        malId: anime.malId,
-        malImageUrl: malDetails?.imageUrl,
-      }),
-    [anime.anilistId, anime.malId, malDetails?.imageUrl],
-  );
+  }, [anime.malId]);
 
   const cardData = useMemo(
     () => ({
       title: displayTitle,
       genres: anime.genres,
       malId: anime.malId,
-      anilistId: anime.anilistId,
-      imageUrl: coverFallbacks[0] ?? null,
-      coverFallbacks: coverFallbacks.slice(1),
+      imageUrl: malDetails?.imageUrl ?? null,
       studios: malDetails?.studios ?? [],
       score: malDetails?.score ?? null,
       episodes: anime.episodes,
@@ -150,7 +129,7 @@ export function AnimeCard({
       malYear: anime.malYear,
       malStatus: anime.malStatus,
     }),
-    [anime, displayTitle, malDetails, coverFallbacks],
+    [anime, displayTitle, malDetails],
   );
 
   const accentClassName = isFinishedStatus(myStatus)
@@ -202,7 +181,6 @@ export function AnimeCard({
       layout="poster"
       anime={cardData}
       onCoverClick={() => setDetailOpen(true)}
-      enableHoverCard={false}
       accentClassName={accentClassName}
       headerRight={
         <>

@@ -40,7 +40,6 @@ import {
 import { useAnilistCatalog } from "@/lib/anilist/use-anilist-catalog";
 import {
   fetchMalTop,
-  fetchMalSeason,
   hydrateDiscoverImages,
   searchMalAnime,
   type DiscoverItem,
@@ -476,12 +475,18 @@ function getCurrentSeason(now = new Date()): { season: string; year: number } {
   return { season, year: now.getFullYear() };
 }
 
-function viewUsesCatalog(activeView: DiscoverView): boolean {
-  return (
+function viewUsesCatalog(
+  activeView: DiscoverView,
+  activePickMode: PickMode,
+): boolean {
+  if (
     activeView === "all" ||
     activeView === "airing" ||
     activeView === "upcoming"
-  );
+  ) {
+    return true;
+  }
+  return activeView === "pick" && activePickMode !== "lucky";
 }
 
 export function MalDiscover({
@@ -582,7 +587,7 @@ export function MalDiscover({
   );
 
   const catalogFilteredItems = useMemo(() => {
-    if (!viewUsesCatalog(view)) return [];
+    if (!viewUsesCatalog(view, pickMode)) return [];
 
     let list: DiscoverItem[] = catalogBaseItems;
     const { byMal, byAnilist } = watchlistLookup;
@@ -654,7 +659,7 @@ export function MalDiscover({
   ]);
 
   const filteredBeforePage = useMemo(() => {
-    if (viewUsesCatalog(view)) {
+    if (viewUsesCatalog(view, pickMode)) {
       return catalogFilteredItems;
     }
 
@@ -707,7 +712,7 @@ export function MalDiscover({
   ]);
 
   const listPagination = useMemo(() => {
-    if (!viewUsesCatalog(view)) return null;
+    if (!viewUsesCatalog(view, pickMode)) return null;
 
     const filteredCount = filteredBeforePage.length;
     const catalogTotal = catalog.totalItems ?? catalog.items.length;
@@ -780,7 +785,7 @@ export function MalDiscover({
   }, [view, pickMode, catalog.items.length, luckyPick, rollLucky]);
 
   useEffect(() => {
-    if (viewUsesCatalog(view)) return;
+    if (viewUsesCatalog(view, pickMode)) return;
 
     const activeView = view;
     const activePickMode = pickMode;
@@ -834,10 +839,7 @@ export function MalDiscover({
           }
 
           const topType = activePickMode === "year" ? "year" : "season";
-          const topItems =
-            activePickMode === "season"
-              ? await fetchMalSeason("now")
-              : await fetchMalTop(topType, 50);
+          const topItems = await fetchMalTop(topType, 25);
           let items = dedupeByMalId(topItems);
           items = await enrichItems(items);
           if (seq !== loadSeqRef.current) return;
@@ -861,11 +863,11 @@ export function MalDiscover({
   }, [view, pickMode, debouncedQuery]);
 
   useEffect(() => {
-    if (!viewUsesCatalog(view)) return;
+    if (!viewUsesCatalog(view, pickMode)) return;
     setIsLoading(catalog.items.length === 0 && catalog.status === "loading");
   }, [view, pickMode, catalog.items.length, catalog.status]);
 
-  const sourceResults = viewUsesCatalog(view)
+  const sourceResults = viewUsesCatalog(view, pickMode)
     ? catalogBaseItems
     : apiResults;
 
@@ -881,7 +883,7 @@ export function MalDiscover({
   }, [sourceResults]);
 
   const filteredResults = useMemo(() => {
-    if (viewUsesCatalog(view)) {
+    if (viewUsesCatalog(view, pickMode)) {
       const pageItems = paginateList(
         filteredBeforePage,
         catalogPage,
@@ -909,12 +911,12 @@ export function MalDiscover({
     catalog.status === "loading" || catalog.status === "idle";
   const showLucky = view === "pick" && pickMode === "lucky";
   const showCatalogProgress =
-    catalogIsLoading && (viewUsesCatalog(view) || showLucky);
-  const listIsLoading = viewUsesCatalog(view)
+    catalogIsLoading && (viewUsesCatalog(view, pickMode) || showLucky);
+  const listIsLoading = viewUsesCatalog(view, pickMode)
     ? (catalog.items.length === 0 && catalogIsLoading) || pageAwaitingData
     : isLoading && resultState.items.length === 0 && !showLucky;
   const showListPagination =
-    viewUsesCatalog(view) &&
+    viewUsesCatalog(view, pickMode) &&
     listPagination != null &&
     (catalog.totalItems != null || catalog.items.length > 0);
 
@@ -1105,7 +1107,7 @@ export function MalDiscover({
         </div>
       )}
 
-      {!showLucky && viewUsesCatalog(view) && (
+      {!showLucky && viewUsesCatalog(view, pickMode) && (
         <div className="space-y-3">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
             Sortierung
@@ -1250,7 +1252,7 @@ export function MalDiscover({
       )}
 
       {catalog.status === "error" &&
-        (viewUsesCatalog(view) || showLucky) && (
+        (viewUsesCatalog(view, pickMode) || showLucky) && (
           <p className="rounded-xl border border-red-500/30 bg-red-950/30 px-4 py-3 text-sm text-red-200">
             AniList catalog failed: {catalog.error}
           </p>
