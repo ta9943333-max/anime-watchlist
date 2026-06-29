@@ -2,8 +2,8 @@ import type { DiscoverItem } from "@/lib/mal/jikan";
 
 const DB_NAME = "anime-watchlist";
 const STORE_NAME = "anilist-catalog";
-const CACHE_KEY = "catalog-v1";
-const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const CACHE_KEY = "catalog-v2";
+const MAX_AGE_MS = 15 * 60 * 1000;
 
 export type CatalogCacheRecord = {
   items: DiscoverItem[];

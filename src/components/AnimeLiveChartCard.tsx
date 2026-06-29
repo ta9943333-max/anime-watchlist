@@ -19,6 +19,7 @@ export type AnimeLiveChartData = AnimeReleaseFields & {
   malId?: number | null;
   anilistId?: number | null;
   imageUrl?: string | null;
+  coverFallbacks?: string[];
   studios?: string[];
   score?: number | null;
   episodes?: number | null;
@@ -102,6 +103,7 @@ export function AnimeLiveChartCard({
   const coverInner = anime.imageUrl ? (
     <LazyCoverImage
       src={anime.imageUrl}
+      fallbacks={anime.coverFallbacks}
       alt=""
       className="aspect-[2/3] w-full object-cover"
       onClick={onCoverClick}
