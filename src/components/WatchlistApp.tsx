@@ -15,6 +15,7 @@ import { MonthlyRecapModal } from "@/components/MonthlyRecapModal";
 import { ProfileTab } from "@/components/ProfileTab";
 import { SearchBar } from "@/components/SearchBar";
 import { SortTabs } from "@/components/SortTabs";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserSelector } from "@/components/UserSelector";
 import {
   applyDiscoverEntryToWatchlist,
@@ -618,6 +619,32 @@ export function WatchlistApp() {
       );
     }
 
+    const totalEps = runtimeAnime.episodes;
+    if (
+      totalEps &&
+      totalEps > 0 &&
+      episodesWatched >= totalEps &&
+      getMemberStatus(nextStatuses, currentUser) !== "completed"
+    ) {
+      const currentStatus = getMemberStatus(nextStatuses, currentUser);
+      if (statusShowsEpisodeProgress(currentStatus)) {
+        try {
+          const withRuntime = await ensureAnimeHasRuntime(runtimeAnime);
+          if (getExactRuntime(withRuntime)) {
+            runtimeAnime = withRuntime;
+            nextStatuses = setMemberStatus(
+              nextStatuses,
+              currentUser,
+              "completed",
+              episodesWatched,
+            );
+          }
+        } catch {
+          // Fortschritt speichern, Auto-Completed nur mit verifizierter Laufzeit
+        }
+      }
+    }
+
     setAnimeList((prev) =>
       prev.map((entry) =>
         entry.id === animeId
@@ -856,7 +883,7 @@ export function WatchlistApp() {
 
   return (
     <div className="min-h-screen bg-[var(--background)] pb-nav-safe">
-      <div className="relative mx-auto w-full max-w-6xl px-3 py-4 sm:px-4 sm:py-5">
+      <div className="relative mx-auto w-full max-w-[var(--content-max-width)] px-3 py-4 sm:px-4 sm:py-5">
         {viewTab !== "profile" && (
           <header className="mb-5 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -876,6 +903,8 @@ export function WatchlistApp() {
                 </p>
               </div>
             </div>
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
             {viewTab === "list" && (
               <div className="hidden grid-cols-4 gap-2 sm:grid">
                 {[
@@ -898,6 +927,7 @@ export function WatchlistApp() {
                 ))}
               </div>
             )}
+            </div>
           </header>
         )}
 

@@ -2,6 +2,7 @@
 
 import { LogOut, Star } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { buildMemberProfile } from "@/lib/stats/leaderboard";
 import type { AnimeEntry } from "@/lib/types";
 
@@ -46,14 +47,17 @@ export function ProfileTab({
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onLogout}
-          className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-muted)] transition hover:text-white"
-        >
-          <LogOut className="h-4 w-4" />
-          {accessMode === "member" ? "Logout" : "Wechseln"}
-        </button>
+        <div className="flex flex-col items-end gap-2">
+          <ThemeToggle />
+          <button
+            type="button"
+            onClick={onLogout}
+            className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-muted)] transition hover:text-white"
+          >
+            <LogOut className="h-4 w-4" />
+            {accessMode === "member" ? "Logout" : "Wechseln"}
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

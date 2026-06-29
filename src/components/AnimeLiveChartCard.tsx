@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ExternalLink, Sparkles, Star } from "lucide-react";
 import { releaseFieldsFromAnime } from "@/components/AnimeReleaseBadge";
+import { LazyCoverImage } from "@/components/ui/LazyCoverImage";
+import { MediaHoverCard } from "@/components/ui/MediaHoverCard";
 import type { AnimeReleaseFields } from "@/lib/mal/release-date";
 import {
   formatAnimeRelease,
@@ -25,7 +27,7 @@ export type AnimeLiveChartData = AnimeReleaseFields & {
 };
 
 export const ANIME_CARD_GRID =
-  "grid w-full grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6";
+  "grid w-full grid-cols-2 gap-2 min-[480px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 anilist-app-shell";
 
 export const ANIME_LIST_CARD_GRID =
   "grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
@@ -37,6 +39,8 @@ type AnimeLiveChartCardProps = {
   footerExtra?: ReactNode;
   accentClassName?: string;
   layout?: "list" | "poster";
+  onCoverClick?: () => void;
+  enableHoverCard?: boolean;
 };
 
 function formatEpisodeLine(anime: AnimeLiveChartData): string {
@@ -58,6 +62,8 @@ export function AnimeLiveChartCard({
   footerExtra,
   accentClassName,
   layout = "list",
+  onCoverClick,
+  enableHoverCard = true,
 }: AnimeLiveChartCardProps) {
   const releaseInfo = useMemo(() => {
     const fields = releaseFieldsFromAnime(anime);
@@ -93,6 +99,31 @@ export function AnimeLiveChartCard({
 
   const poster = layout === "poster";
 
+  const coverInner = anime.imageUrl ? (
+    <LazyCoverImage
+      src={anime.imageUrl}
+      alt=""
+      className="aspect-[2/3] w-full object-cover"
+      onClick={onCoverClick}
+    />
+  ) : (
+    <div
+      className="flex aspect-[2/3] w-full cursor-pointer items-center justify-center bg-[var(--surface-elevated)]"
+      onClick={onCoverClick}
+      role={onCoverClick ? "button" : undefined}
+      tabIndex={onCoverClick ? 0 : undefined}
+      onKeyDown={
+        onCoverClick
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") onCoverClick();
+            }
+          : undefined
+      }
+    >
+      <Sparkles className="h-8 w-8 text-[var(--accent)]/50" />
+    </div>
+  );
+
   const coverBlock = (
     <div className={`relative ${poster ? "w-full" : "w-[108px] shrink-0 lg:w-[118px]"}`}>
       {countdownTarget && countdown && (
@@ -106,21 +137,22 @@ export function AnimeLiveChartCard({
         </div>
       )}
 
-      {anime.imageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={anime.imageUrl}
-          alt=""
-          className="aspect-[2/3] w-full object-cover"
-        />
+      {enableHoverCard ? (
+        <MediaHoverCard
+          title={anime.title}
+          synopsis={anime.synopsis}
+          genres={anime.genres}
+          score={anime.score}
+          episodes={anime.episodes}
+        >
+          {coverInner}
+        </MediaHoverCard>
       ) : (
-        <div className="flex aspect-[2/3] w-full items-center justify-center bg-[var(--surface-elevated)]">
-          <Sparkles className="h-8 w-8 text-[var(--accent)]/50" />
-        </div>
+        coverInner
       )}
 
       {anime.score != null && anime.score > 0 && (
-        <div className="absolute bottom-2 left-2 flex items-center gap-1 rounded bg-black/85 px-1.5 py-0.5 text-[11px] font-bold text-[var(--score)]">
+        <div className="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1 rounded bg-black/85 px-1.5 py-0.5 text-[11px] font-bold text-[var(--score)]">
           <Star className="h-3 w-3 fill-[var(--score)]" />
           {anime.score.toFixed(1)}
         </div>

@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { DiscoverAnimeCard } from "@/components/DiscoverAnimeCard";
 import { ANIME_CARD_GRID } from "@/components/AnimeLiveChartCard";
+import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
 import { releaseFieldsFromAnime } from "@/components/AnimeReleaseBadge";
 import {
   fetchAnilistNextEpisodes,
@@ -756,7 +757,7 @@ export function MalDiscover({
   ]);
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 350);
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 200);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
@@ -1284,17 +1285,7 @@ export function MalDiscover({
       )}
 
       {listIsLoading ? (
-        <div className="flex flex-col items-center justify-center gap-3 py-24 text-slate-400">
-          <Loader2 className="h-6 w-6 animate-spin" />
-          {pageAwaitingData ? (
-            <p className="text-sm">
-              Loading page {catalogPage}… ({catalog.items.length.toLocaleString()}{" "}
-              anime cached so far)
-            </p>
-          ) : (
-            <p>Loading…</p>
-          )}
-        </div>
+        <SkeletonCardGrid count={12} layout="poster" />
       ) : showLucky ? (
         catalog.items.length === 0 && catalogIsLoading ? (
           <p className="py-24 text-center text-slate-500">

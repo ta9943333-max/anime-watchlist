@@ -25,7 +25,7 @@ export function AppBottomNav({ active, onChange }: AppBottomNavProps) {
       className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-md"
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
-      <div className="mx-auto flex h-[var(--nav-height)] max-w-3xl items-stretch justify-around px-2">
+      <div className="mx-auto flex h-[var(--nav-height)] max-w-[var(--content-max-width)] items-stretch justify-around px-2">
         {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
           const isActive = active === id;
           return (

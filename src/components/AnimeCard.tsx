@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { AnimeLiveChartCard } from "@/components/AnimeLiveChartCard";
 import { EpisodeProgressField } from "@/components/EpisodeProgressField";
+import { MediaDetailModal } from "@/components/MediaDetailModal";
 import { RewatchCountField } from "@/components/RewatchCountField";
 import { ProgressBar } from "@/components/ProgressBar";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -68,6 +69,7 @@ export function AnimeCard({
   const [editTitle, setEditTitle] = useState(anime.title);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [malDetails, setMalDetails] = useState<{
     imageUrl: string | null;
     synopsis: string | null;
@@ -174,9 +176,11 @@ export function AnimeCard({
   }
 
   return (
+    <>
     <AnimeLiveChartCard
       layout="poster"
       anime={cardData}
+      onCoverClick={() => setDetailOpen(true)}
       accentClassName={accentClassName}
       headerRight={
         <>
@@ -377,5 +381,14 @@ export function AnimeCard({
         ) : undefined
       }
     />
+    {detailOpen && (
+      <MediaDetailModal
+        anilistId={anime.anilistId}
+        malId={anime.malId}
+        fallbackTitle={displayTitle}
+        onClose={() => setDetailOpen(false)}
+      />
+    )}
+    </>
   );
 }

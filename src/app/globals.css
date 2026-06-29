@@ -1,41 +1,74 @@
 @import "tailwindcss";
 
-/* AniList-inspired design tokens */
+/* AniList.co Design System — Pflichtenheft CSS-Variablen */
 :root {
-  --background: #0b1622;
-  --foreground: #e8edf4;
-  --surface: #151f2b;
-  --surface-elevated: #1c2733;
-  --border: #2a3544;
-  --accent: #02a9ff;
-  --accent-hover: #33bbff;
-  --accent-muted: rgba(2, 169, 255, 0.15);
-  --text-muted: #8b9cb3;
-  --text-dim: #5c6b7f;
-  --score: #ffc83d;
+  /* Legacy-Aliase für bestehende Komponenten */
+  --background: rgb(var(--color-background));
+  --foreground: rgb(255, 255, 255);
+  --surface: rgb(var(--color-foreground));
+  --surface-elevated: rgb(var(--color-foreground-grey));
+  --border: rgb(var(--color-foreground-grey));
+  --accent: rgb(var(--color-primary));
+  --accent-muted: rgba(var(--color-primary), 0.15);
+  --text-muted: rgb(var(--color-text-light));
+  --text-dim: rgb(var(--color-text-lighter));
+  --score: rgb(var(--color-accent));
+
+  --color-primary: 51, 119, 255;
+  --color-primary-dark: 0, 85, 255;
+  --color-accent: 224, 213, 158;
+  --color-red: 250, 90, 90;
+  --color-background: 39, 44, 56;
+  --color-foreground: 31, 35, 45;
+  --color-foreground-grey: 25, 29, 38;
+  --color-foreground-grey-dark: 16, 20, 25;
+  --color-text: 159, 173, 189;
+  --color-text-light: 129, 140, 153;
+  --color-text-lighter: 133, 150, 165;
+  --border-radius: 4px;
+  --transition-smooth: 0.25s ease-in-out;
   --nav-height: 4.25rem;
+  --content-max-width: 1500px;
+}
+
+.site-theme-light {
+  --foreground: rgb(31, 35, 45);
+  --background: rgb(var(--color-background));
+  --surface: rgb(var(--color-foreground));
+  --surface-elevated: rgb(var(--color-foreground-grey));
+  --border: rgb(220, 226, 235);
+
+  --color-background: 240, 243, 246;
+  --color-foreground: 255, 255, 255;
+  --color-foreground-grey: 245, 247, 249;
+  --color-foreground-grey-dark: 230, 234, 240;
+  --color-text: 74, 85, 104;
+  --color-text-light: 113, 128, 150;
+  --color-text-lighter: 133, 150, 165;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-anilist: var(--accent);
-  --color-anilist-muted: var(--accent-muted);
-  --color-surface: var(--surface);
-  --color-surface-elevated: var(--surface-elevated);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: rgb(var(--color-background));
+  color: rgb(var(--color-text));
   font-family: var(--font-sans), system-ui, sans-serif;
+  transition: background-color var(--transition-smooth),
+    color var(--transition-smooth);
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: rgba(var(--color-primary), 0.35);
   color: white;
+}
+
+.anilist-app-shell {
+  max-width: var(--content-max-width);
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .anilist-scroll-tabs {
@@ -48,4 +81,99 @@ body {
 
 .pb-nav-safe {
   padding-bottom: calc(var(--nav-height) + env(safe-area-inset-bottom, 0px));
+}
+
+/* Skeleton pulse */
+@keyframes anilist-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.anilist-skeleton {
+  background: rgb(var(--color-foreground-grey));
+  animation: anilist-skeleton-pulse 1.4s ease-in-out infinite;
+  border-radius: var(--border-radius);
+}
+
+/* Markdown — AniList Spoiler */
+.markdown-spoiler {
+  background-color: rgb(var(--color-foreground));
+  color: transparent !important;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0 4px;
+  user-select: none;
+  transition: background-color var(--transition-smooth),
+    color var(--transition-smooth);
+}
+
+.markdown-spoiler.revealed {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: rgb(var(--color-text)) !important;
+  user-select: text;
+}
+
+.site-theme-light .markdown-spoiler.revealed {
+  background-color: rgba(0, 0, 0, 0.06);
+}
+
+.user-mention {
+  color: rgb(var(--color-primary));
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.user-mention:hover {
+  color: rgb(var(--color-primary-dark));
+}
+
+.custom-link {
+  color: rgb(var(--color-primary));
+  text-decoration: underline;
+}
+
+/* Hover card */
+.media-hover-card {
+  border-radius: var(--border-radius);
+  border: 1px solid rgb(var(--color-foreground-grey));
+  background: rgb(var(--color-foreground));
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+/* Buttons — AniList primary */
+.btn-anilist-primary {
+  border-radius: var(--border-radius);
+  background: rgb(var(--color-primary));
+  color: white;
+  transition: background var(--transition-smooth);
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.btn-anilist-primary:hover {
+  background: rgb(var(--color-primary-dark));
+}
+
+.surface-card {
+  border-radius: var(--border-radius);
+  border: 1px solid rgb(var(--color-foreground-grey));
+  background: rgb(var(--color-foreground));
+}
+
+.surface-elevated {
+  border-radius: var(--border-radius);
+  background: rgb(var(--color-foreground-grey));
+}
+
+.text-primary {
+  color: rgb(var(--color-primary));
+}
+
+.text-muted {
+  color: rgb(var(--color-text-light));
 }

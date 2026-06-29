@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { Loader2, Plus, Star } from "lucide-react";
 import { AnimeLiveChartCard } from "@/components/AnimeLiveChartCard";
 import { EpisodeProgressField } from "@/components/EpisodeProgressField";
+import { MediaDetailModal } from "@/components/MediaDetailModal";
 import { RewatchCountField } from "@/components/RewatchCountField";
 import { StatusBadge } from "@/components/StatusBadge";
 import {
@@ -106,10 +108,14 @@ export function DiscoverAnimeCard({
   }
 
   const ratingControl = showWatchlistRating || showPersonalRating;
+  const [detailOpen, setDetailOpen] = useState(false);
 
   return (
+    <>
     <AnimeLiveChartCard
+      layout="poster"
       anime={anime}
+      onCoverClick={() => setDetailOpen(true)}
       accentClassName={accentClassName}
       headerRight={
         myStatus !== "none" ? <StatusBadge status={myStatus} /> : undefined
@@ -217,5 +223,14 @@ export function DiscoverAnimeCard({
         )
       }
     />
+    {detailOpen && (
+      <MediaDetailModal
+        anilistId={anime.anilistId}
+        malId={anime.malId}
+        fallbackTitle={anime.title}
+        onClose={() => setDetailOpen(false)}
+      />
+    )}
+    </>
   );
 }
