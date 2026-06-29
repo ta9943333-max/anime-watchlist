@@ -1,17 +1,26 @@
 import { supabase } from "@/lib/supabase/client";
+import {
+  isAnilistProfileStats,
+  type AnilistProfileStats,
+} from "@/lib/anilist/profile-stats";
 import type { Member } from "@/lib/types";
 
 type MemberRow = {
   id: string;
   name: string;
   created_at: string;
+  profile_stats?: unknown;
 };
 
 function mapRow(row: MemberRow): Member {
+  const profileStats = isAnilistProfileStats(row.profile_stats)
+    ? row.profile_stats
+    : null;
   return {
     id: row.id,
     name: row.name,
     createdAt: row.created_at,
+    profileStats,
   };
 }
 

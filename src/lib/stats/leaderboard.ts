@@ -11,6 +11,10 @@ import {
   formatWatchHours,
 } from "@/lib/anime/runtime";
 import {
+  memberStatsFromAnilistProfile,
+  type AnilistProfileStats,
+} from "@/lib/anilist/profile-stats";
+import {
   computeWatchContribution,
 } from "@/lib/stats/watch-progress";
 import {
@@ -102,6 +106,36 @@ function emptyPeriodStats(): PeriodStats {
 }
 
 function computeMemberStats(
+  memberName: string,
+  animeList: AnimeEntry[],
+  profileStats?: AnilistProfileStats | null,
+): MemberLeaderboardStats {
+  if (profileStats?.anime) {
+    const official = memberStatsFromAnilistProfile(profileStats.anime);
+    const computed = computeMemberStatsFromList(memberName, animeList);
+    return {
+      ...computed,
+      completedCount: official.completedCount,
+      episodesWatched: official.episodesWatched,
+      totalMinutes: official.totalMinutes,
+      totalHours: official.totalHours,
+      daysWatched: official.daysWatched,
+      byPeriod: {
+        ...computed.byPeriod,
+        all: {
+          ...computed.byPeriod.all,
+          completedCount: official.completedCount,
+          episodesWatched: official.episodesWatched,
+          totalMinutes: official.totalMinutes,
+          totalHours: official.totalHours,
+        },
+      },
+    };
+  }
+  return computeMemberStatsFromList(memberName, animeList);
+}
+
+function computeMemberStatsFromList(
   memberName: string,
   animeList: AnimeEntry[],
 ): MemberLeaderboardStats {
@@ -225,7 +259,9 @@ export function buildLeaderboardForPeriod(
   period: LeaderboardPeriod,
 ): MemberLeaderboardStats[] {
   return members
-    .map((member) => computeMemberStats(member.name, animeList))
+    .map((member) =>
+      computeMemberStats(member.name, animeList, member.profileStats),
+    )
     .sort(
       (a, b) =>
         b.byPeriod[period].completedCount - a.byPeriod[period].completedCount,
@@ -238,7 +274,9 @@ export function buildHoursRankingForPeriod(
   period: LeaderboardPeriod,
 ): MemberLeaderboardStats[] {
   return members
-    .map((member) => computeMemberStats(member.name, animeList))
+    .map((member) =>
+      computeMemberStats(member.name, animeList, member.profileStats),
+    )
     .sort(
       (a, b) =>
         b.byPeriod[period].totalMinutes - a.byPeriod[period].totalMinutes,
@@ -284,8 +322,9 @@ export type MemberProfile = {
 export function buildMemberProfile(
   name: string,
   animeList: AnimeEntry[],
+  profileStats?: AnilistProfileStats | null,
 ): MemberProfile {
-  const stats = computeMemberStats(name, animeList);
+  const stats = computeMemberStats(name, animeList, profileStats);
   const grouped = new Map<
     AnimeStatus,
     { id: string; title: string; rating: number }[]

@@ -101,6 +101,19 @@ function parseCsvLists(csvPath: string): AnilistGdprListEntry[] {
   return JSON.parse(out.trim()) as AnilistGdprListEntry[];
 }
 
+function parseCsvStatistics(csvPath: string) {
+  const out = execSync(`python scripts/parse-gdpr-statistics.py "${csvPath}"`, {
+    encoding: "utf8",
+    maxBuffer: 1024 * 1024,
+    cwd: process.cwd(),
+  });
+  return JSON.parse(out.trim()) as {
+    count: number;
+    minutesWatched: number;
+    progress: number;
+  };
+}
+
 function buildMemberEntry(
   status: AnimeStatus,
   episodesWatched: number,
@@ -270,27 +283,19 @@ async function main() {
 
   const completed = importRows.filter((r) => r.status === "completed").length;
   const watching = importRows.filter((r) => r.status === "watching").length;
-  const totalEps = importRows.reduce((s, r) => {
-    if (r.status === "completed" && r.episodes) return s + r.episodes;
-    if (statusShowsEpisodeProgress(r.status)) return s + r.episodesWatched;
-    return s;
-  }, 0);
-  const totalMin = importRows.reduce((s, r) => {
-    if (r.status === "completed" && r.totalDurationMin) return s + r.totalDurationMin;
-    if (
-      statusShowsEpisodeProgress(r.status) &&
-      r.episodeDurationMin &&
-      r.episodesWatched
-    ) {
-      return s + r.episodeDurationMin * r.episodesWatched;
-    }
-    return s;
-  }, 0);
+
+  const profileAnimeStats = parseCsvStatistics(CSV_PATH);
+  const { error: memberError } = await supabase
+    .from("members")
+    .update({ profile_stats: { anime: profileAnimeStats } })
+    .eq("name", MEMBER_NAME);
+  if (memberError) throw new Error(memberError.message);
 
   console.log(`Fertig: ${created} neu, ${updated} aktualisiert`);
   console.log(
-    `${MEMBER_NAME}: ${importRows.length} Anime | ${completed} abgeschlossen | ${watching} watching | ~${totalEps} Folgen | ~${Math.round(totalMin / 60)} Std.`,
+    `${MEMBER_NAME} AniList-Profil: ${profileAnimeStats.count} Serien | ${profileAnimeStats.progress} Folgen | ${profileAnimeStats.minutesWatched} Min | ${profileAnimeStats.minutesWatched / 60} Std.`,
   );
+  console.log(`Listenstatus: ${completed} completed, ${watching} watching (${importRows.length} Einträge)`);
 }
 
 main().catch((err) => {

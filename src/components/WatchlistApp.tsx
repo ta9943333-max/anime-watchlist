@@ -61,7 +61,12 @@ import {
 } from "@/lib/storage";
 import { buildMonthlyRecap, type MonthlyRecap } from "@/lib/stats/leaderboard";
 import { computeWatchContribution } from "@/lib/stats/watch-progress";
-import { formatWatchDays, formatWatchHours, getExactRuntime } from "@/lib/anime/runtime";
+import { getExactRuntime } from "@/lib/anime/runtime";
+import { memberStatsFromAnilistProfile } from "@/lib/anilist/profile-stats";
+import {
+  formatDaysFromMinutes,
+  formatHoursFromMinutes,
+} from "@/lib/time/precise";
 import {
   getMemberStatus,
   getMemberEpisodesWatched,
@@ -837,7 +842,18 @@ export function WatchlistApp() {
 
   const stats = useMemo(() => {
     if (!currentUser) {
-      return { series: 0, episodes: 0, hours: 0, days: 0 };
+      return { series: 0, episodes: 0, hours: "0", days: "0" };
+    }
+
+    const member = members.find((m) => m.name === currentUser);
+    if (member?.profileStats?.anime) {
+      const official = memberStatsFromAnilistProfile(member.profileStats.anime);
+      return {
+        series: official.completedCount,
+        episodes: official.episodesWatched,
+        hours: official.totalHoursLabel,
+        days: official.daysWatchedLabel,
+      };
     }
 
     let series = 0;
@@ -864,10 +880,10 @@ export function WatchlistApp() {
     return {
       series,
       episodes,
-      hours: formatWatchHours(minutes),
-      days: formatWatchDays(minutes),
+      hours: formatHoursFromMinutes(minutes),
+      days: formatDaysFromMinutes(minutes),
     };
-  }, [animeList, currentUser]);
+  }, [animeList, currentUser, members]);
 
   if (!currentUser) {
     return (
@@ -940,6 +956,9 @@ export function WatchlistApp() {
             <ProfileTab
               name={currentUser}
               animeList={animeList}
+              profileStats={
+                members.find((m) => m.name === currentUser)?.profileStats ?? null
+              }
               accessMode={accessMode}
               onLogout={() => void handleLogout()}
               onOpenMember={setProfileName}
@@ -1084,6 +1103,9 @@ export function WatchlistApp() {
         <MemberProfileModal
           name={profileName}
           animeList={animeList}
+          profileStats={
+            members.find((m) => m.name === profileName)?.profileStats ?? null
+          }
           isCurrentUser={profileName === currentUser}
           onClose={() => setProfileName(null)}
         />

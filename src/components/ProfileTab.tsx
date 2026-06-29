@@ -4,11 +4,17 @@ import { LogOut, Star } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { buildMemberProfile } from "@/lib/stats/leaderboard";
+import {
+  type AnilistProfileStats,
+  memberStatsFromAnilistProfile,
+} from "@/lib/anilist/profile-stats";
+import { formatDaysFromMinutes, formatHoursFromMinutes } from "@/lib/time/precise";
 import type { AnimeEntry } from "@/lib/types";
 
 type ProfileTabProps = {
   name: string;
   animeList: AnimeEntry[];
+  profileStats?: AnilistProfileStats | null;
   accessMode: "open" | "site" | "member";
   onLogout: () => void;
   onOpenMember: (name: string) => void;
@@ -17,18 +23,25 @@ type ProfileTabProps = {
 export function ProfileTab({
   name,
   animeList,
+  profileStats,
   accessMode,
   onLogout,
   onOpenMember,
 }: ProfileTabProps) {
-  const profile = buildMemberProfile(name, animeList);
+  const profile = buildMemberProfile(name, animeList, profileStats);
   const { stats, groups } = profile;
+  const hoursLabel = profileStats?.anime
+    ? memberStatsFromAnilistProfile(profileStats.anime).totalHoursLabel
+    : formatHoursFromMinutes(stats.totalMinutes);
+  const daysLabel = profileStats?.anime
+    ? memberStatsFromAnilistProfile(profileStats.anime).daysWatchedLabel
+    : formatDaysFromMinutes(stats.totalMinutes);
 
   const statCards = [
     { label: "Abgeschlossen", value: stats.completedCount },
     { label: "Folgen", value: stats.episodesWatched },
-    { label: "Stunden", value: stats.totalHours },
-    { label: "Tage", value: stats.daysWatched },
+    { label: "Stunden", value: hoursLabel },
+    { label: "Tage", value: daysLabel },
   ];
 
   return (

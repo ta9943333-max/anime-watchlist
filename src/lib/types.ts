@@ -16,6 +16,7 @@ export type Member = {
   id: string;
   name: string;
   createdAt: string;
+  profileStats?: import("@/lib/anilist/profile-stats").AnilistProfileStats | null;
 };
 
 export type Folder = {

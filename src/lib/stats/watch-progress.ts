@@ -1,8 +1,8 @@
 import {
   getExactRuntime,
-  minutesForEpisodesWatched,
   type ExactAnimeRuntime,
 } from "@/lib/anime/runtime";
+import { anilistMinutesFromProgress } from "@/lib/time/precise";
 import {
   FINISHED_STATUSES,
   getMemberEpisodesWatched,
@@ -26,30 +26,34 @@ function contributionFromRuntime(
   statuses: MemberStatuses,
   memberName: string,
 ): WatchContribution | null {
+  const storedProgress = getMemberEpisodesWatched(statuses, memberName);
+
   if (status === "rewatching") {
     const times = getMemberRewatchCount(statuses, memberName);
+    const episodesPerRun = storedProgress ?? runtime.episodes;
     return {
-      episodes: runtime.episodes * times,
-      minutes: runtime.totalDurationMin * times,
+      episodes: episodesPerRun * times,
+      minutes: anilistMinutesFromProgress(episodesPerRun, runtime.episodeDurationMin) * times,
       countsAsFinishedSeries: true,
       rewatchTimes: times,
     };
   }
 
   if (status === "completed") {
+    const episodes = storedProgress ?? runtime.episodes;
     return {
-      episodes: runtime.episodes,
-      minutes: runtime.totalDurationMin,
+      episodes,
+      minutes: anilistMinutesFromProgress(episodes, runtime.episodeDurationMin),
       countsAsFinishedSeries: true,
       rewatchTimes: 1,
     };
   }
 
   if (statusShowsEpisodeProgress(status)) {
-    const watched = getMemberEpisodesWatched(statuses, memberName);
+    const watched = storedProgress;
     if (watched == null || watched <= 0) return null;
     const episodes = Math.min(Math.floor(watched), runtime.episodes);
-    const minutes = minutesForEpisodesWatched(episodes, runtime);
+    const minutes = anilistMinutesFromProgress(episodes, runtime.episodeDurationMin);
     if (episodes <= 0 && minutes <= 0) return null;
     return {
       episodes,

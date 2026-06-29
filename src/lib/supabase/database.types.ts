@@ -110,16 +110,19 @@ export type Database = {
           created_at: string;
           id: string;
           name: string;
+          profile_stats: Json | null;
         };
         Insert: {
           created_at?: string;
           id?: string;
           name: string;
+          profile_stats?: Json | null;
         };
         Update: {
           created_at?: string;
           id?: string;
           name?: string;
+          profile_stats?: Json | null;
         };
         Relationships: [];
       };

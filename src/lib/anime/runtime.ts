@@ -83,11 +83,11 @@ export function minutesForEpisodesWatched(
 }
 
 export function formatWatchHours(totalMinutes: number): number {
-  return Math.round((totalMinutes / 60) * 100) / 100;
+  return totalMinutes / 60;
 }
 
 export function formatWatchDays(totalMinutes: number): number {
-  return Math.round((totalMinutes / 60 / 24) * 100) / 100;
+  return totalMinutes / 1440;
 }
 
 /** Merge local row with MAL fields and return exact runtime when possible. */

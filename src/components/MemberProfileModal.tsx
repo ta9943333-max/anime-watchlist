@@ -4,11 +4,17 @@ import { useEffect, useMemo } from "react";
 import { Star, X } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
 import { buildMemberProfile } from "@/lib/stats/leaderboard";
+import {
+  type AnilistProfileStats,
+  memberStatsFromAnilistProfile,
+} from "@/lib/anilist/profile-stats";
+import { formatDaysFromMinutes, formatHoursFromMinutes } from "@/lib/time/precise";
 import type { AnimeEntry } from "@/lib/types";
 
 type MemberProfileModalProps = {
   name: string;
   animeList: AnimeEntry[];
+  profileStats?: AnilistProfileStats | null;
   isCurrentUser: boolean;
   onClose: () => void;
 };
@@ -16,12 +22,13 @@ type MemberProfileModalProps = {
 export function MemberProfileModal({
   name,
   animeList,
+  profileStats,
   isCurrentUser,
   onClose,
 }: MemberProfileModalProps) {
   const profile = useMemo(
-    () => buildMemberProfile(name, animeList),
-    [name, animeList],
+    () => buildMemberProfile(name, animeList, profileStats),
+    [name, animeList, profileStats],
   );
 
   useEffect(() => {
@@ -33,12 +40,18 @@ export function MemberProfileModal({
   }, [onClose]);
 
   const { stats, groups } = profile;
+  const hoursLabel = profileStats?.anime
+    ? memberStatsFromAnilistProfile(profileStats.anime).totalHoursLabel
+    : formatHoursFromMinutes(stats.totalMinutes);
+  const daysLabel = profileStats?.anime
+    ? memberStatsFromAnilistProfile(profileStats.anime).daysWatchedLabel
+    : formatDaysFromMinutes(stats.totalMinutes);
 
   const statCards = [
     { label: "Serien", value: stats.completedCount },
     { label: "Folgen", value: stats.episodesWatched },
-    { label: "Stunden", value: stats.totalHours },
-    { label: "Tage", value: stats.daysWatched },
+    { label: "Stunden", value: hoursLabel },
+    { label: "Tage", value: daysLabel },
   ];
 
   return (
