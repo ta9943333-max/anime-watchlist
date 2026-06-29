@@ -175,6 +175,7 @@ export function AnimeCard({
 
   return (
     <AnimeLiveChartCard
+      layout="poster"
       anime={cardData}
       accentClassName={accentClassName}
       headerRight={

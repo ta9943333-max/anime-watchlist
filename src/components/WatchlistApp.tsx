@@ -1,16 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, Compass, List, LogOut, Sparkles, Trophy, Tv } from "lucide-react";
+import { AlertCircle } from "lucide-react";
+import { AppBottomNav } from "@/components/AppBottomNav";
 import { AnimeForm } from "@/components/AnimeForm";
 import { AnimeList } from "@/components/AnimeList";
-import { FilterTabs } from "@/components/FilterTabs";
 import { FolderSection } from "@/components/FolderSection";
 import { GenreFilter } from "@/components/GenreFilter";
 import { Leaderboard } from "@/components/Leaderboard";
+import { LibraryStatusTabs } from "@/components/LibraryStatusTabs";
 import { MalDiscover } from "@/components/MalDiscover";
 import { MemberProfileModal } from "@/components/MemberProfileModal";
 import { MonthlyRecapModal } from "@/components/MonthlyRecapModal";
+import { ProfileTab } from "@/components/ProfileTab";
 import { SearchBar } from "@/components/SearchBar";
 import { SortTabs } from "@/components/SortTabs";
 import { UserSelector } from "@/components/UserSelector";
@@ -853,115 +855,70 @@ export function WatchlistApp() {
   }
 
   return (
-    <div className="min-h-screen">
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -left-32 top-0 h-96 w-96 rounded-full bg-violet-600/10 blur-3xl" />
-        <div className="absolute -right-32 bottom-0 h-96 w-96 rounded-full bg-emerald-500/10 blur-3xl" />
-      </div>
-
-      <div
-        className={
-          viewTab === "leaderboard"
-            ? "relative mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 sm:py-12"
-            : "relative w-full px-3 py-6 sm:px-4 sm:py-8 lg:px-5"
-        }
-      >
-        <header className="mb-8">
-          <div className="mb-6 flex items-start justify-between gap-4">
-            <div>
-              <div className="mb-2 inline-flex items-center gap-2 rounded-xl bg-violet-600/15 px-3 py-1 text-xs font-medium text-violet-300">
-                <Sparkles className="h-3.5 w-3.5" />
-                Gemeinsame Watchlist · Live
+    <div className="min-h-screen bg-[var(--background)] pb-nav-safe">
+      <div className="relative mx-auto w-full max-w-6xl px-3 py-4 sm:px-4 sm:py-5">
+        {viewTab !== "profile" && (
+          <header className="mb-5 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--accent)] text-sm font-black text-white">
+                A
               </div>
-              <h1 className="flex items-center gap-2 text-2xl font-bold text-white sm:text-3xl">
-                <Tv className="h-7 w-7 text-violet-400" />
-                Anime Watchlist
-              </h1>
-              <p className="mt-1 text-slate-400">
-                Eingeloggt als{" "}
-                <button
-                  type="button"
-                  onClick={() => setProfileName(currentUser)}
-                  className="font-medium text-violet-300 underline-offset-2 hover:underline"
-                >
-                  {currentUser}
-                </button>
-                {" · "}
-                {sortedMembers.length} in der Gruppe
-              </p>
+              <div>
+                <h1 className="text-lg font-bold leading-tight text-white">
+                  {viewTab === "list"
+                    ? "Bibliothek"
+                    : viewTab === "discover"
+                      ? "Entdecken"
+                      : "Charts"}
+                </h1>
+                <p className="text-xs text-[var(--text-muted)]">
+                  {currentUser} · {sortedMembers.length} Mitglieder
+                </p>
+              </div>
             </div>
-
-            <button
-              type="button"
-              onClick={() => void handleLogout()}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-400 transition hover:border-slate-700 hover:text-white"
-            >
-              <LogOut className="h-4 w-4" />
-              {accessMode === "member" ? "Logout" : "Wechseln"}
-            </button>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {[
-              { label: "Serien", value: stats.series },
-              { label: "Folgen", value: stats.episodes },
-              { label: "Stunden", value: stats.hours },
-              { label: "Tage", value: stats.days },
-            ].map((stat) => (
-              <div
-                key={stat.label}
-                className="rounded-xl border border-slate-800/80 bg-slate-900/50 px-4 py-3 text-center"
-              >
-                <p className="text-2xl font-bold text-white">{stat.value}</p>
-                <p className="text-xs text-slate-500">{stat.label}</p>
+            {viewTab === "list" && (
+              <div className="hidden grid-cols-4 gap-2 sm:grid">
+                {[
+                  { label: "Serien", value: stats.series },
+                  { label: "Folgen", value: stats.episodes },
+                  { label: "Std.", value: stats.hours },
+                  { label: "Tage", value: stats.days },
+                ].map((stat) => (
+                  <div
+                    key={stat.label}
+                    className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-center"
+                  >
+                    <p className="text-sm font-bold tabular-nums text-white">
+                      {stat.value}
+                    </p>
+                    <p className="text-[9px] text-[var(--text-dim)]">
+                      {stat.label}
+                    </p>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </header>
+            )}
+          </header>
+        )}
 
-        <div className="mb-8 flex gap-2">
-          <button
-            type="button"
-            onClick={() => setViewTab("list")}
-            className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
-              viewTab === "list"
-                ? "border-violet-500/50 bg-violet-600/20 text-violet-200"
-                : "border-slate-800 bg-slate-900/50 text-slate-400 hover:border-slate-700 hover:text-white"
-            }`}
-          >
-            <List className="h-4 w-4" />
-            Watchlist
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewTab("discover")}
-            className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
-              viewTab === "discover"
-                ? "border-violet-500/50 bg-violet-600/20 text-violet-200"
-                : "border-slate-800 bg-slate-900/50 text-slate-400 hover:border-slate-700 hover:text-white"
-            }`}
-          >
-            <Compass className="h-4 w-4" />
-            Discover
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewTab("leaderboard")}
-            className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
-              viewTab === "leaderboard"
-                ? "border-violet-500/50 bg-violet-600/20 text-violet-200"
-                : "border-slate-800 bg-slate-900/50 text-slate-400 hover:border-slate-700 hover:text-white"
-            }`}
-          >
-            <Trophy className="h-4 w-4" />
-            Leaderboard
-          </button>
-        </div>
-
-        {viewTab === "leaderboard" ? (
+        {viewTab === "profile" ? (
           isLoading ? (
             <div className="flex justify-center py-16">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-violet-500 border-t-transparent" />
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" />
+            </div>
+          ) : (
+            <ProfileTab
+              name={currentUser}
+              animeList={animeList}
+              accessMode={accessMode}
+              onLogout={() => void handleLogout()}
+              onOpenMember={setProfileName}
+            />
+          )
+        ) : viewTab === "leaderboard" ? (
+          isLoading ? (
+            <div className="flex justify-center py-16">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" />
             </div>
           ) : (
             <Leaderboard
@@ -1000,7 +957,12 @@ export function WatchlistApp() {
 
         <section className="mb-8 space-y-4">
           <SearchBar value={search} onChange={setSearch} />
-          <FilterTabs active={filter} onChange={setFilter} />
+          <LibraryStatusTabs
+            active={filter}
+            onChange={setFilter}
+            animeList={animeList}
+            currentUser={currentUser}
+          />
           <GenreFilter
             animeList={animeList}
             selectedGenre={selectedGenre}
@@ -1107,6 +1069,8 @@ export function WatchlistApp() {
           }}
         />
       )}
+
+      <AppBottomNav active={viewTab} onChange={setViewTab} />
     </div>
   );
 }

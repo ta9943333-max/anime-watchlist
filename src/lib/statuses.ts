@@ -40,40 +40,36 @@ export const STATUS_OPTIONS: {
   color: string;
 }[] = [
   { value: "none", label: "None", color: "text-slate-500 bg-slate-800/60" },
-  {
-    value: "watching",
-    label: "Watching",
-    color: "text-violet-300 bg-violet-600/20 border-violet-500/30",
-  },
+  { value: "watching", label: "Watching", color: "text-[#3db4f2] bg-[#3db4f2]/15 border-[#3db4f2]/30" },
   {
     value: "completed",
     label: "Completed",
-    color: "text-emerald-300 bg-emerald-600/20 border-emerald-500/30",
+    color: "text-[#32b8c6] bg-[#32b8c6]/15 border-[#32b8c6]/30",
   },
   {
     value: "rewatching",
     label: "Rewatching",
-    color: "text-teal-300 bg-teal-600/20 border-teal-500/30",
+    color: "text-[#4dc9b0] bg-[#4dc9b0]/15 border-[#4dc9b0]/30",
   },
   {
     value: "planning",
     label: "Planning",
-    color: "text-blue-300 bg-blue-600/20 border-blue-500/30",
+    color: "text-[#a259ff] bg-[#a259ff]/15 border-[#a259ff]/30",
   },
   {
     value: "considering",
     label: "Considering",
-    color: "text-amber-300 bg-amber-600/20 border-amber-500/30",
+    color: "text-[#c77dff] bg-[#c77dff]/15 border-[#c77dff]/30",
   },
   {
     value: "paused",
     label: "Paused",
-    color: "text-orange-300 bg-orange-600/20 border-orange-500/30",
+    color: "text-[#fab005] bg-[#fab005]/15 border-[#fab005]/30",
   },
   {
     value: "dropped",
     label: "Dropped",
-    color: "text-red-300 bg-red-600/20 border-red-500/30",
+    color: "text-[#ed4245] bg-[#ed4245]/15 border-[#ed4245]/30",
   },
   {
     value: "skipping",

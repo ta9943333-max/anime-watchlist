@@ -8,7 +8,7 @@ export type FilterOption = "all" | "no-status" | AnimeStatus;
 
 export type SortOption = "newest" | "title-asc" | "title-desc";
 
-export type ViewTab = "list" | "discover" | "leaderboard";
+export type ViewTab = "list" | "discover" | "leaderboard" | "profile";
 
 export type LeaderboardPeriod = "today" | "week" | "month" | "year" | "all";
 

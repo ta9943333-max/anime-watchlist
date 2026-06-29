@@ -164,7 +164,7 @@ function CatalogProgress({
       : null;
 
   return (
-    <div className="rounded-xl border border-sky-500/30 bg-sky-950/20 px-4 py-4">
+    <div className="rounded-xl border border-[var(--accent)]/30 bg-[var(--accent-muted)] px-4 py-4">
       <div className="flex items-center gap-3 text-sm text-sky-200">
         <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
         <p>
@@ -189,7 +189,7 @@ function CatalogProgress({
       {progress != null && (
         <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-800">
           <div
-            className="h-full rounded-full bg-sky-500 transition-all duration-300"
+            className="h-full rounded-full bg-[var(--accent)] transition-all duration-300"
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -284,7 +284,7 @@ function BrowsePagination({
             onKeyDown={(event) => {
               if (event.key === "Enter") applyJump();
             }}
-            className="w-20 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-center text-sm text-white outline-none focus:border-sky-500/60"
+            className="w-20 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-center text-sm text-white outline-none focus:border-[var(--accent)]/60"
           />
           <button
             type="button"
@@ -1045,7 +1045,7 @@ export function MalDiscover({
               }}
               className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
                 view === key
-                  ? "border-sky-500/50 bg-sky-600/15 text-sky-200"
+                  ? "border-[var(--accent)]/50 bg-[var(--accent-muted)] text-[var(--accent)]"
                   : "border-slate-700 bg-slate-900/50 text-slate-400 hover:text-white"
               }`}
             >
@@ -1101,7 +1101,7 @@ export function MalDiscover({
                 ? "Search any anime on MyAnimeList…"
                 : "Filter current list…"
             }
-            className="w-full rounded-xl border border-slate-700 bg-slate-950/80 py-3.5 pl-11 pr-4 text-white placeholder:text-slate-500 outline-none focus:border-sky-500/60 focus:ring-2 focus:ring-sky-500/20"
+            className="w-full rounded-xl border border-slate-700 bg-slate-950/80 py-3.5 pl-11 pr-4 text-white placeholder:text-slate-500 outline-none focus:border-[var(--accent)]/60 focus:ring-2 focus:ring-[var(--accent)]/20"
           />
         </div>
       )}
@@ -1173,7 +1173,7 @@ export function MalDiscover({
                 onClick={() => setStatusFilter("all")}
                 className={`rounded-full px-4 py-2 text-sm font-medium transition ${
                   statusFilter === "all"
-                    ? "bg-violet-600 text-white"
+                    ? "bg-[var(--accent)] text-white"
                     : "bg-slate-800/80 text-slate-400 hover:text-white"
                 }`}
               >
@@ -1191,7 +1191,7 @@ export function MalDiscover({
                     }
                     className={`rounded-full px-4 py-2 text-sm font-medium transition ${
                       statusFilter === option.value
-                        ? "bg-violet-600 text-white"
+                        ? "bg-[var(--accent)] text-white"
                         : "bg-slate-800/80 text-slate-400 hover:text-white"
                     }`}
                   >
@@ -1213,7 +1213,7 @@ export function MalDiscover({
                   onClick={() => setGenreFilter(null)}
                   className={`rounded-full px-4 py-2 text-sm font-medium transition ${
                     genreFilter === null
-                      ? "bg-sky-600 text-white"
+                      ? "bg-[var(--accent)] text-white"
                       : "bg-slate-800/80 text-slate-400 hover:text-white"
                   }`}
                 >
@@ -1228,7 +1228,7 @@ export function MalDiscover({
                     }
                     className={`rounded-full px-4 py-2 text-sm font-medium transition ${
                       genreFilter === genre
-                        ? "bg-sky-600 text-white"
+                        ? "bg-[var(--accent)] text-white"
                         : "bg-slate-800/80 text-slate-400 hover:text-white"
                     }`}
                   >
