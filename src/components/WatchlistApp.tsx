@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { AlertCircle } from "lucide-react";
 import { AppBottomNav } from "@/components/AppBottomNav";
 import { AnimeForm } from "@/components/AnimeForm";
@@ -9,7 +10,7 @@ import { FolderSection } from "@/components/FolderSection";
 import { GenreFilter } from "@/components/GenreFilter";
 import { Leaderboard } from "@/components/Leaderboard";
 import { LibraryStatusTabs } from "@/components/LibraryStatusTabs";
-import { MalDiscover } from "@/components/MalDiscover";
+import { SkeletonCardGrid } from "@/components/ui/SkeletonCard";
 import { MemberProfileModal } from "@/components/MemberProfileModal";
 import { MonthlyRecapModal } from "@/components/MonthlyRecapModal";
 import { ProfileTab } from "@/components/ProfileTab";
@@ -89,6 +90,14 @@ import {
   type SortOption,
   type ViewTab,
 } from "@/lib/types";
+
+const MalDiscover = dynamic(
+  () => import("@/components/MalDiscover").then((m) => m.MalDiscover),
+  {
+    loading: () => <SkeletonCardGrid count={12} layout="poster" />,
+    ssr: false,
+  },
+);
 
 function getInitialUser(): string | null {
   return loadCurrentUser();
@@ -172,7 +181,7 @@ export function WatchlistApp() {
   useEffect(() => {
     let cancelled = false;
 
-    async function loadData() {
+    async function loadData(options?: { backgroundSync?: boolean }) {
       try {
         const [list, memberList, allowed] = await Promise.all([
           fetchAnimeList(),
@@ -200,20 +209,29 @@ export function WatchlistApp() {
           clearLocalProgressCache();
           if (currentUser) clearAllDiscoverStatuses(currentUser);
         }
-        try {
-          markLocalWrite();
-          ready = await reconcileAnimeMetadata(list);
-          ready = await enrichMissingMalMetadata(ready);
-        } catch {
-          // Stats still use resolved fallback runtime when sync fails
-        }
 
         if (!cancelled) {
-          setAnimeList((prev) => applyAnimeMetadataPatch(prev, ready));
+          setAnimeList(ready);
           setMembers(memberList);
           setAllowedNames(allowed);
           setFolders(folderList);
           setError(null);
+          setIsLoading(false);
+        }
+
+        // MAL-Abgleich im Hintergrund — blockiert nicht den ersten Paint
+        if (options?.backgroundSync !== false) {
+          void (async () => {
+            try {
+              markLocalWrite();
+              const synced = await reconcileAnimeMetadata(list);
+              if (!cancelled) {
+                setAnimeList((prev) => applyAnimeMetadataPatch(prev, synced));
+              }
+            } catch {
+              // Liste bleibt nutzbar ohne MAL-Abgleich
+            }
+          })();
         }
       } catch (err) {
         if (!cancelled) {
@@ -222,9 +240,6 @@ export function WatchlistApp() {
               ? err.message
               : "Verbindung zu Supabase fehlgeschlagen.",
           );
-        }
-      } finally {
-        if (!cancelled) {
           setIsLoading(false);
         }
       }
@@ -234,7 +249,7 @@ export function WatchlistApp() {
 
     const unsubscribeAnime = subscribeToAnimeChanges(() => {
       if (shouldSkipRemoteSync()) return;
-      void loadData();
+      void loadData({ backgroundSync: false });
     });
     const unsubscribeMembers = subscribeToMemberChanges(() => {
       if (shouldSkipRemoteSync()) return;
@@ -443,7 +458,9 @@ export function WatchlistApp() {
   async function handleSyncMal() {
     setIsSyncingMal(true);
     try {
-      const enriched = await enrichMissingMalMetadata(animeList);
+      markLocalWrite();
+      const reconciled = await reconcileAnimeMetadata(animeList);
+      const enriched = await enrichMissingMalMetadata(reconciled);
       setAnimeList(enriched);
       setError(null);
     } catch (err) {
@@ -899,7 +916,7 @@ export function WatchlistApp() {
 
   return (
     <div className="min-h-screen bg-[var(--background)] pb-nav-safe">
-      <div className="relative mx-auto w-full max-w-[var(--content-max-width)] px-3 py-4 sm:px-4 sm:py-5">
+      <div className="relative mx-auto w-full max-w-[var(--content-max-width)] px-2 py-3 sm:px-4 sm:py-4">
         {viewTab !== "profile" && (
           <header className="mb-5 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -1004,7 +1021,8 @@ export function WatchlistApp() {
           </div>
         )}
 
-        <section className="mb-8 space-y-4">
+        <section className="mb-4 space-y-3">
+          <AnimeForm onAdd={handleAddAnime} />
           <SearchBar value={search} onChange={setSearch} />
           <LibraryStatusTabs
             active={filter}
@@ -1065,16 +1083,16 @@ export function WatchlistApp() {
             />
 
             {!openFolderId && (
-              <section className="w-full">
-                <div className="mb-4">
-                  <h2 className="text-lg font-semibold text-white">Alle Anime</h2>
-                  <p className="text-sm text-slate-500">
-                    Komplette Liste · {allAnimeList.length} Einträge
-                  </p>
-                </div>
-
-                <div className="mb-5">
-                  <AnimeForm onAdd={handleAddAnime} />
+              <section className="library-section w-full">
+                <div className="mb-3 flex items-end justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-semibold text-[var(--foreground)]">
+                      Anime
+                    </h2>
+                    <p className="text-xs text-[var(--text-muted)]">
+                      {allAnimeList.length} Einträge
+                    </p>
+                  </div>
                 </div>
 
                 <AnimeList

@@ -83,6 +83,35 @@ body {
   padding-bottom: calc(var(--nav-height) + env(safe-area-inset-bottom, 0px));
 }
 
+/* AniList-Bibliothek: dichtes Poster-Grid, volle Breite bis 1500px */
+.library-grid {
+  display: grid;
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin-left: auto;
+  margin-right: auto;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
+}
+
+@media (min-width: 640px) {
+  .library-grid {
+    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  }
+}
+
+@media (min-width: 1200px) {
+  .library-grid {
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+  }
+}
+
+.library-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 200px;
+}
+
 /* Skeleton pulse */
 @keyframes anilist-skeleton-pulse {
   0%,

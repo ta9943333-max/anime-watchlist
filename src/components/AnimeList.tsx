@@ -1,6 +1,10 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Film } from "lucide-react";
-import { ANIME_CARD_GRID } from "@/components/AnimeLiveChartCard";
-import { AnimeCard } from "@/components/AnimeCard";
+import { LibraryAnimeEditor } from "@/components/LibraryAnimeEditor";
+import { LibraryAnimeGrid } from "@/components/LibraryAnimeCard";
+import { fetchMalAnimeDetails } from "@/lib/mal/jikan";
 import type { AnimeStatus } from "@/lib/statuses";
 import type { AnimeEntry, Folder, Member } from "@/lib/types";
 
@@ -22,47 +26,88 @@ type AnimeListProps = {
 
 export function AnimeList({
   animeList,
-  members,
   folders,
   currentUser,
   onSetMyStatus,
   onSetEpisodesWatched,
   onSetRewatchCount,
   onMoveToFolder,
-  onRenameAnime,
   onDeleteAnime,
   onRateAnime,
-  onOpenProfile,
   emptyMessage = "Keine Anime in dieser Ansicht.",
 }: AnimeListProps) {
+  const [editId, setEditId] = useState<string | null>(null);
+  const [malImages, setMalImages] = useState<Map<number, string>>(new Map());
+
+  const malIdsNeedingImages = useMemo(() => {
+    const ids = new Set<number>();
+    for (const anime of animeList) {
+      if (anime.anilistId && anime.anilistId > 0) continue;
+      if (anime.malId && anime.malId > 0) ids.add(anime.malId);
+    }
+    return [...ids];
+  }, [animeList]);
+
+  useEffect(() => {
+    if (malIdsNeedingImages.length === 0) return;
+    let cancelled = false;
+
+    void fetchMalAnimeDetails(malIdsNeedingImages).then((map) => {
+      if (cancelled) return;
+      setMalImages((prev) => {
+        const next = new Map(prev);
+        for (const [malId, details] of map) {
+          if (details.imageUrl) next.set(malId, details.imageUrl);
+        }
+        return next;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [malIdsNeedingImages]);
+
+  const editAnime = editId
+    ? animeList.find((entry) => entry.id === editId)
+    : undefined;
+
+  const handleOpen = useCallback((id: string) => setEditId(id), []);
+
   if (animeList.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-800 py-16 text-center">
-        <Film className="mb-3 h-10 w-10 text-slate-600" />
-        <p className="text-slate-400">{emptyMessage}</p>
+      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] py-16 text-center">
+        <Film className="mb-3 h-10 w-10 text-[var(--text-dim)]" />
+        <p className="text-[var(--text-muted)]">{emptyMessage}</p>
       </div>
     );
   }
 
   return (
-    <div className={ANIME_CARD_GRID}>
-      {animeList.map((anime) => (
-        <AnimeCard
-          key={anime.id}
-          anime={anime}
-          members={members}
+    <>
+      <LibraryAnimeGrid
+        animeList={animeList}
+        currentUser={currentUser}
+        malImages={malImages}
+        onOpenAnime={handleOpen}
+      />
+      {editAnime && (
+        <LibraryAnimeEditor
+          anime={editAnime}
           folders={folders}
           currentUser={currentUser}
+          malImageUrl={
+            editAnime.malId ? malImages.get(editAnime.malId) ?? null : null
+          }
+          onClose={() => setEditId(null)}
           onSetMyStatus={onSetMyStatus}
           onSetEpisodesWatched={onSetEpisodesWatched}
           onSetRewatchCount={onSetRewatchCount}
           onMoveToFolder={onMoveToFolder}
-          onRenameAnime={onRenameAnime}
           onDeleteAnime={onDeleteAnime}
           onRateAnime={onRateAnime}
-          onOpenProfile={onOpenProfile}
         />
-      ))}
-    </div>
+      )}
+    </>
   );
 }
