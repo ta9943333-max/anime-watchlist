@@ -107,7 +107,7 @@ function getInitialUser(): string | null {
   return loadCurrentUser();
 }
 
-export function WatchlistApp({ embedded = false }: { embedded?: boolean } = {}) {
+export function WatchlistApp() {
   const [currentUser, setCurrentUser] = useState<string | null>(getInitialUser);
   const [members, setMembers] = useState<Member[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -927,13 +927,7 @@ export function WatchlistApp({ embedded = false }: { embedded?: boolean } = {}) 
   }
 
   return (
-    <div
-      className={
-        embedded
-          ? "bg-[var(--background)] pb-nav-safe"
-          : "min-h-screen bg-[var(--background)] pb-nav-safe"
-      }
-    >
+    <div className="min-h-screen bg-[var(--background)] pb-nav-safe">
       <div className="relative mx-auto w-full max-w-[var(--content-max-width)] px-2 py-3 sm:px-4 sm:py-4">
         {viewTab !== "profile" && (
           <header className="mb-5 flex items-center justify-between gap-3">
@@ -943,13 +937,11 @@ export function WatchlistApp({ embedded = false }: { embedded?: boolean } = {}) 
               </div>
               <div>
                 <h1 className="text-lg font-bold leading-tight text-white">
-                  {embedded
-                    ? "Group Watchlist"
-                    : viewTab === "list"
-                      ? "Bibliothek"
-                      : viewTab === "discover"
-                        ? "Entdecken"
-                        : "Charts"}
+                  {viewTab === "list"
+                    ? "Bibliothek"
+                    : viewTab === "discover"
+                      ? "Entdecken"
+                      : "Charts"}
                 </h1>
                 <p className="text-xs text-[var(--text-muted)]">
                   {currentUser} · {sortedMembers.length} Mitglieder
